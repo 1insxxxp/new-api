@@ -80,6 +80,19 @@ describe('pricing display mode symbols', () => {
     expect(formatPrice(tokenModel, 'input', 'M', true, 4, 7)).toBe('¥12')
   })
 
+  test('formatPrice adds mode symbols without changing token display values', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'TOKENS',
+        quotaPerUnit: 500000,
+      },
+    })
+
+    expect(formatPrice(tokenModel, 'input', 'M', false, 4, 7)).toBe('$1500000')
+    expect(formatPrice(tokenModel, 'input', 'M', true, 4, 7)).toBe('¥857143')
+  })
+
   test('formatGroupPrice uses the symbol selected by display mode', () => {
     const groupRatio = { premium: 2 }
 

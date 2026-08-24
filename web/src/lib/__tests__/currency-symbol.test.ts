@@ -143,4 +143,34 @@ describe('currency symbol override', () => {
       })
     ).toBe('$21K')
   })
+
+  test('keeps token displays symbol-free when no override is requested', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'TOKENS',
+        quotaPerUnit: 500000,
+      },
+    })
+
+    expect(formatCurrencyFromUSD(3, { abbreviate: false })).toBe('1500000')
+  })
+
+  test('suppresses token display symbol overrides when symbols are hidden', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'TOKENS',
+        quotaPerUnit: 500000,
+      },
+    })
+
+    expect(
+      formatCurrencyFromUSD(3, {
+        abbreviate: false,
+        showSymbol: false,
+        symbolOverride: '$',
+      })
+    ).toBe('1500000')
+  })
 })

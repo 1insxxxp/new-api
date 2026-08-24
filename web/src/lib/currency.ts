@@ -430,18 +430,15 @@ export function formatCurrencyFromUSD(
 
   if (meta.kind === 'tokens') {
     const tokens = amountUSD * config.quotaPerUnit
-    if (merged.compact) {
-      return new Intl.NumberFormat(merged.locale, {
-        notation: 'compact',
-        maximumFractionDigits: 1,
-      }).format(tokens)
-    }
-    return formatNumberWithSuffix(
-      tokens,
-      0,
-      merged.digitsSmall,
-      merged.abbreviate
-    )
+    const formatted = merged.compact
+      ? new Intl.NumberFormat(merged.locale, {
+          notation: 'compact',
+          maximumFractionDigits: 1,
+        }).format(tokens)
+      : formatNumberWithSuffix(tokens, 0, merged.digitsSmall, merged.abbreviate)
+
+    if (!merged.showSymbol || !merged.symbolOverride) return formatted
+    return `${merged.symbolOverride}${formatted}`
   }
 
   const value =
