@@ -45,6 +45,7 @@ import {
   type RequestRuleTrace,
   type TierCondition,
 } from '../lib/billing-expr'
+import { getPricingModeSymbol } from '../lib/price'
 
 type DynamicPricingBreakdownProps = {
   billingExpr: string | null | undefined
@@ -56,6 +57,8 @@ type DynamicPricingBreakdownProps = {
   matchedTierLabel?: string | null
   /** Request-rule traces emitted by the settlement run. */
   requestRules?: RequestRuleTrace[] | null
+  /** Pricing display mode. Omit to retain the configured global symbol. */
+  showRechargePrice?: boolean
   /**
    * Hide cache-pricing columns regardless of the per-tier values. The log
    * details dialog passes this when the actual request did not consume any
@@ -171,6 +174,7 @@ export function DynamicPricingBreakdown({
   billingExpr,
   matchedTierLabel,
   requestRules,
+  showRechargePrice,
   hideCacheColumns = false,
   compact = false,
 }: DynamicPricingBreakdownProps) {
@@ -178,7 +182,7 @@ export function DynamicPricingBreakdown({
   const expr = billingExpr || ''
   const currency = useSystemConfigStore((s) => s.config.currency)
 
-  const { symbol, rate } = useMemo(() => {
+  const { symbol: configuredSymbol, rate } = useMemo(() => {
     if (currency.quotaDisplayType === 'CNY') {
       return { symbol: '¥', rate: currency.usdExchangeRate || 7 }
     }
@@ -190,6 +194,10 @@ export function DynamicPricingBreakdown({
     }
     return { symbol: '$', rate: 1 }
   }, [currency])
+  const symbol =
+    showRechargePrice === undefined
+      ? configuredSymbol
+      : getPricingModeSymbol(showRechargePrice)
 
   const { tiers, ruleGroups } = useMemo(() => {
     const split = splitBillingExprAndRequestRules(expr)
