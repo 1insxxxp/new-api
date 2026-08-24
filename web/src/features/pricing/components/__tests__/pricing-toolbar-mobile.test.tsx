@@ -71,7 +71,12 @@ describe('pricing toolbar mobile controls', () => {
     const { onRechargePriceChange } = renderToolbar()
     const mobileControls = screen.getByTestId('mobile-pricing-controls')
 
-    expect(mobileControls).toHaveClass('sm:hidden')
+    expect(mobileControls).toHaveClass(
+      'flex',
+      'w-full',
+      'flex-wrap',
+      'sm:hidden'
+    )
     expect(
       within(mobileControls).getByRole('group', {
         name: 'Price display mode',
@@ -80,10 +85,12 @@ describe('pricing toolbar mobile controls', () => {
     expect(
       within(mobileControls).getByRole('group', { name: 'Token unit' })
     ).toBeInTheDocument()
-    expect(
-      screen.getAllByRole('group', { name: 'Price display mode' })
-    ).toHaveLength(2)
+    const priceDisplayGroups = screen.getAllByRole('group', {
+      name: 'Price display mode',
+    })
+    expect(priceDisplayGroups).toHaveLength(2)
     expect(screen.getAllByRole('group', { name: 'Token unit' })).toHaveLength(2)
+    expect(priceDisplayGroups[1].parentElement).toHaveClass('hidden', 'sm:flex')
 
     await user.click(
       within(mobileControls).getByRole('button', { name: 'Recharge' })
