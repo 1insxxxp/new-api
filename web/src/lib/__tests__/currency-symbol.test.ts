@@ -209,4 +209,40 @@ describe('currency symbol override', () => {
       })
     ).toBe('-$1.5M')
   })
+
+  test('inserts token display symbol overrides after the existing non-compact sign', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'TOKENS',
+        quotaPerUnit: 500000,
+      },
+    })
+
+    expect(
+      formatCurrencyFromUSD(-3, {
+        locale: 'sv-SE',
+        abbreviate: false,
+        symbolOverride: '$',
+      })
+    ).toBe('-$1500000')
+  })
+
+  test('preserves compact locale parts around token display symbol overrides', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'TOKENS',
+        quotaPerUnit: 500000,
+      },
+    })
+
+    expect(
+      formatCurrencyFromUSD(-3, {
+        locale: 'sv-SE',
+        compact: true,
+        symbolOverride: '$',
+      })
+    ).toBe('−$1,5\u00a0mn')
+  })
 })

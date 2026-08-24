@@ -99,7 +99,10 @@ export interface CurrencyFormatOptions {
    * "$280K" in en). The currency symbol is preserved.
    */
   compact?: boolean
-  /** Whether to include the currency/custom symbol. Token displays are unchanged. */
+  /**
+   * Whether to include a symbol. An explicit symbolOverride may add one to
+   * token displays; false suppresses all symbols.
+   */
   showSymbol?: boolean
   /** Presentation-only symbol override; numeric conversion remains unchanged. */
   symbolOverride?: string
@@ -446,18 +449,21 @@ export function formatCurrencyFromUSD(
 
     if (!merged.showSymbol || !merged.symbolOverride) return formatted
 
-    const numericPartIndex = parts.findIndex(
-      (part) =>
-        part.type === 'integer' ||
-        part.type === 'nan' ||
-        part.type === 'infinity'
-    )
     let symbolIndex = 0
 
-    for (const part of parts.slice(0, numericPartIndex)) {
-      if (formatted.startsWith(part.value, symbolIndex)) {
+    if (merged.compact) {
+      const numericPartIndex = parts.findIndex(
+        (part) =>
+          part.type === 'integer' ||
+          part.type === 'nan' ||
+          part.type === 'infinity'
+      )
+
+      for (const part of parts.slice(0, numericPartIndex)) {
         symbolIndex += part.value.length
       }
+    } else if (formatted.startsWith('-') || formatted.startsWith('+')) {
+      symbolIndex = 1
     }
 
     return `${formatted.slice(0, symbolIndex)}${merged.symbolOverride}${formatted.slice(symbolIndex)}`
