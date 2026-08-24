@@ -173,4 +173,40 @@ describe('currency symbol override', () => {
       })
     ).toBe('1500000')
   })
+
+  test('preserves sign placement for token display symbol overrides', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'TOKENS',
+        quotaPerUnit: 500000,
+      },
+    })
+
+    expect(
+      formatCurrencyFromUSD(-3, {
+        locale: 'en-US',
+        abbreviate: false,
+        symbolOverride: '$',
+      })
+    ).toBe('-$1500000')
+  })
+
+  test('preserves sign placement for compact token display symbol overrides', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'TOKENS',
+        quotaPerUnit: 500000,
+      },
+    })
+
+    expect(
+      formatCurrencyFromUSD(-3, {
+        locale: 'en-US',
+        compact: true,
+        symbolOverride: '$',
+      })
+    ).toBe('-$1.5M')
+  })
 })

@@ -430,15 +430,37 @@ export function formatCurrencyFromUSD(
 
   if (meta.kind === 'tokens') {
     const tokens = amountUSD * config.quotaPerUnit
+    const formatter = new Intl.NumberFormat(
+      merged.locale,
+      merged.compact
+        ? {
+            notation: 'compact',
+            maximumFractionDigits: 1,
+          }
+        : { useGrouping: false }
+    )
+    const parts = formatter.formatToParts(tokens)
     const formatted = merged.compact
-      ? new Intl.NumberFormat(merged.locale, {
-          notation: 'compact',
-          maximumFractionDigits: 1,
-        }).format(tokens)
+      ? parts.map((part) => part.value).join('')
       : formatNumberWithSuffix(tokens, 0, merged.digitsSmall, merged.abbreviate)
 
     if (!merged.showSymbol || !merged.symbolOverride) return formatted
-    return `${merged.symbolOverride}${formatted}`
+
+    const numericPartIndex = parts.findIndex(
+      (part) =>
+        part.type === 'integer' ||
+        part.type === 'nan' ||
+        part.type === 'infinity'
+    )
+    let symbolIndex = 0
+
+    for (const part of parts.slice(0, numericPartIndex)) {
+      if (formatted.startsWith(part.value, symbolIndex)) {
+        symbolIndex += part.value.length
+      }
+    }
+
+    return `${formatted.slice(0, symbolIndex)}${merged.symbolOverride}${formatted.slice(symbolIndex)}`
   }
 
   const value =
