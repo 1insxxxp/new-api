@@ -16,12 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { cn } from '@/lib/utils'
+
 import type { TopNavLink } from '../types'
 import { PublicHeader, type PublicHeaderProps } from './public-header'
 
 type PublicLayoutProps = {
   children: React.ReactNode
   showMainContainer?: boolean
+  showHeader?: boolean
   navContent?: React.ReactNode
   headerProps?: Omit<PublicHeaderProps, 'navContent'>
   navLinks?: TopNavLink[]
@@ -33,21 +36,30 @@ type PublicLayoutProps = {
 }
 
 export function PublicLayout(props: PublicLayoutProps) {
+  const showHeader = props.showHeader !== false
+
   return (
     <div className='bg-background text-foreground relative min-h-svh overflow-x-clip'>
-      <PublicHeader
-        navContent={props.navContent}
-        navLinks={props.navLinks}
-        showThemeSwitch={props.showThemeSwitch}
-        showAuthButtons={props.showAuthButtons}
-        showNotifications={props.showNotifications}
-        logo={props.logo}
-        siteName={props.siteName}
-        {...props.headerProps}
-      />
+      {showHeader && (
+        <PublicHeader
+          navContent={props.navContent}
+          navLinks={props.navLinks}
+          showThemeSwitch={props.showThemeSwitch}
+          showAuthButtons={props.showAuthButtons}
+          showNotifications={props.showNotifications}
+          logo={props.logo}
+          siteName={props.siteName}
+          {...props.headerProps}
+        />
+      )}
 
       {props.showMainContainer !== false ? (
-        <main className='container px-4 py-6 pt-20 md:px-4'>
+        <main
+          className={cn(
+            'container px-4 py-6 md:px-4',
+            showHeader ? 'pt-20' : 'pt-6'
+          )}
+        >
           {props.children}
         </main>
       ) : (
