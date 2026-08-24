@@ -29,6 +29,7 @@ import {
   type ParsedTier,
 } from './billing-expr'
 import { getDisplayGroupRatio } from './model-helpers'
+import { getPricingModeSymbol } from './price'
 
 type DynamicPriceOptions = {
   tokenUnit: TokenUnit
@@ -104,6 +105,7 @@ export function formatDynamicUnitPrice(
     digitsLarge: 4,
     digitsSmall: 6,
     abbreviate: false,
+    symbolOverride: getPricingModeSymbol(options.showRechargePrice ?? false),
   })
 }
 

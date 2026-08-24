@@ -102,6 +102,10 @@ function hasRatio(value: number | null | undefined): boolean {
   return value !== undefined && value !== null && Number.isFinite(Number(value))
 }
 
+export function getPricingModeSymbol(showRechargePrice: boolean): '$' | '¥' {
+  return showRechargePrice ? '¥' : '$'
+}
+
 /**
  * Apply recharge rate to price
  *
@@ -169,6 +173,7 @@ export function formatPrice(
     digitsLarge: 4,
     digitsSmall: 6,
     abbreviate: false,
+    symbolOverride: getPricingModeSymbol(showWithRecharge),
   })
 }
 
@@ -204,6 +209,7 @@ export function formatGroupPrice(
     digitsLarge: 4,
     digitsSmall: 6,
     abbreviate: false,
+    symbolOverride: getPricingModeSymbol(showWithRecharge),
   })
 }
 
@@ -236,6 +242,7 @@ export function formatFixedPrice(
     digitsLarge: 4,
     digitsSmall: 4,
     abbreviate: false,
+    symbolOverride: getPricingModeSymbol(showWithRecharge),
   })
 }
 
@@ -268,5 +275,6 @@ export function formatRequestPrice(
     digitsLarge: 4,
     digitsSmall: 4,
     abbreviate: false,
+    symbolOverride: getPricingModeSymbol(showWithRecharge),
   })
 }
