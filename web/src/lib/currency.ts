@@ -101,6 +101,8 @@ export interface CurrencyFormatOptions {
   compact?: boolean
   /** Whether to include the currency/custom symbol. Token displays are unchanged. */
   showSymbol?: boolean
+  /** Presentation-only symbol override; numeric conversion remains unchanged. */
+  symbolOverride?: string
   /** Locale used for number formatting (defaults to the runtime locale) */
   locale?: Intl.LocalesArgument | undefined
 }
@@ -137,6 +139,7 @@ const DEFAULT_FORMAT_OPTIONS: ResolvedCurrencyFormatOptions = {
   minimumNonZero: 0,
   compact: false,
   showSymbol: true,
+  symbolOverride: '',
   locale: undefined,
 }
 
@@ -240,6 +243,8 @@ function mergeOptions(
       options.minimumNonZero ?? DEFAULT_FORMAT_OPTIONS.minimumNonZero,
     compact: options.compact ?? DEFAULT_FORMAT_OPTIONS.compact,
     showSymbol: options.showSymbol ?? DEFAULT_FORMAT_OPTIONS.showSymbol,
+    symbolOverride:
+      options.symbolOverride ?? DEFAULT_FORMAT_OPTIONS.symbolOverride,
     locale: options.locale ?? DEFAULT_FORMAT_OPTIONS.locale,
   }
 }
@@ -323,6 +328,15 @@ function formatCurrencyValue(
     options.digitsSmall
   )
   const adjustedValue = adjustForMinimum(value, digits, options.minimumNonZero)
+
+  if (options.showSymbol && options.symbolOverride) {
+    const formatted = new Intl.NumberFormat(options.locale, {
+      notation: options.compact ? 'compact' : 'standard',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: options.compact ? 1 : digits,
+    }).format(adjustedValue)
+    return `${options.symbolOverride}${formatted}`
+  }
 
   if (meta.kind === 'currency') {
     if (!options.showSymbol) {
