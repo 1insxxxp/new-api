@@ -329,15 +329,6 @@ function formatCurrencyValue(
   )
   const adjustedValue = adjustForMinimum(value, digits, options.minimumNonZero)
 
-  if (options.showSymbol && options.symbolOverride) {
-    const formatted = new Intl.NumberFormat(options.locale, {
-      notation: options.compact ? 'compact' : 'standard',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: options.compact ? 1 : digits,
-    }).format(adjustedValue)
-    return `${options.symbolOverride}${formatted}`
-  }
-
   if (meta.kind === 'currency') {
     if (!options.showSymbol) {
       return new Intl.NumberFormat(options.locale, {
@@ -347,15 +338,23 @@ function formatCurrencyValue(
       }).format(adjustedValue)
     }
 
-    const formatted = new Intl.NumberFormat(options.locale, {
+    const formatter = new Intl.NumberFormat(options.locale, {
       style: 'currency',
       currency: meta.currencyCode,
       currencyDisplay: 'narrowSymbol',
       notation: options.compact ? 'compact' : 'standard',
       minimumFractionDigits: 0,
       maximumFractionDigits: options.compact ? 1 : digits,
-    }).format(adjustedValue)
-    return formatted
+    })
+    if (!options.symbolOverride) {
+      return formatter.format(adjustedValue)
+    }
+    return formatter
+      .formatToParts(adjustedValue)
+      .map((part) =>
+        part.type === 'currency' ? options.symbolOverride : part.value
+      )
+      .join('')
   }
 
   const decimal = new Intl.NumberFormat(options.locale, {
@@ -364,7 +363,8 @@ function formatCurrencyValue(
     maximumFractionDigits: options.compact ? 1 : digits,
   }).format(adjustedValue)
 
-  return options.showSymbol ? `${meta.symbol} ${decimal}` : decimal
+  const symbol = options.symbolOverride || meta.symbol
+  return options.showSymbol ? `${symbol} ${decimal}` : decimal
 }
 
 /**

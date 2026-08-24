@@ -71,4 +71,76 @@ describe('currency symbol override', () => {
       })
     ).toBe('¥3')
   })
+
+  test('preserves locale sign placement when overriding a negative currency', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'CNY',
+        usdExchangeRate: 7,
+      },
+    })
+
+    expect(
+      formatCurrencyFromUSD(-3, {
+        locale: 'en-US',
+        abbreviate: false,
+        symbolOverride: '$',
+      })
+    ).toBe('-$21')
+  })
+
+  test('keeps the configured currency symbol without an override', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'CNY',
+        usdExchangeRate: 7,
+      },
+    })
+
+    expect(
+      formatCurrencyFromUSD(3, {
+        locale: 'en-US',
+        abbreviate: false,
+      })
+    ).toBe('¥21')
+  })
+
+  test('suppresses the override when symbols are hidden', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'CNY',
+        usdExchangeRate: 7,
+      },
+    })
+
+    expect(
+      formatCurrencyFromUSD(3, {
+        locale: 'en-US',
+        abbreviate: false,
+        showSymbol: false,
+        symbolOverride: '$',
+      })
+    ).toBe('21')
+  })
+
+  test('keeps compact notation when overriding the symbol', () => {
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...DEFAULT_CURRENCY_CONFIG,
+        quotaDisplayType: 'CNY',
+        usdExchangeRate: 7,
+      },
+    })
+
+    expect(
+      formatCurrencyFromUSD(3000, {
+        locale: 'en-US',
+        compact: true,
+        symbolOverride: '$',
+      })
+    ).toBe('$21K')
+  })
 })
