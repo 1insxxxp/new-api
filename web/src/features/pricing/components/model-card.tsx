@@ -201,26 +201,24 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       )}
     >
       {/* Header: icon + name + price + actions */}
-      <div className='flex items-start justify-between gap-2.5 sm:gap-3'>
-        <div className='flex min-w-0 items-start gap-2.5 sm:gap-3'>
-          <div className='bg-muted/40 flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10 sm:rounded-xl'>
-            {modelIcon || (
-              <span className='text-muted-foreground text-sm font-bold'>
-                {initial}
-              </span>
-            )}
-          </div>
-          <div className='min-w-0'>
-            <h3 className='text-foreground truncate font-mono text-[15px] leading-tight font-bold'>
-              {props.model.model_name}
-            </h3>
-            <div className='mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm sm:mt-1 sm:gap-x-3'>
-              {priceSummary}
-            </div>
+      <div className='grid grid-cols-[2.25rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-2 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:gap-x-3 sm:gap-y-0'>
+        <div className='bg-muted/40 flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10 sm:rounded-xl'>
+          {modelIcon || (
+            <span className='text-muted-foreground text-sm font-bold'>
+              {initial}
+            </span>
+          )}
+        </div>
+        <div className='min-w-0'>
+          <h3 className='text-foreground font-mono text-[15px] leading-tight font-bold break-all whitespace-normal sm:truncate'>
+            {props.model.model_name}
+          </h3>
+          <div className='mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm sm:mt-1 sm:gap-x-3'>
+            {priceSummary}
           </div>
         </div>
 
-        <div className='flex shrink-0 items-center gap-1.5'>
+        <div className='col-start-2 row-start-2 flex shrink-0 items-center gap-1.5 sm:col-start-3 sm:row-start-1'>
           <button
             type='button'
             onClick={props.onClick}
