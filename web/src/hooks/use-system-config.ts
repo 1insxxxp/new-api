@@ -18,7 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useCallback } from 'react'
 
-import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
+import { useTheme } from '@/context/theme-provider'
+import {
+  DEFAULT_SYSTEM_NAME,
+  DEFAULT_LOGO,
+  DEFAULT_LOGO_DARK,
+  DEFAULT_LOGO_LIGHT,
+} from '@/lib/constants'
 import { applyFaviconToDom } from '@/lib/dom-utils'
 import {
   useSystemConfigStore,
@@ -48,6 +54,14 @@ interface StatusApiResponse {
     custom_currency_symbol?: string
     custom_currency_exchange_rate?: number
   }
+}
+
+export function resolveSystemLogo(
+  logo: string,
+  resolvedTheme: 'light' | 'dark'
+): string {
+  if (logo !== DEFAULT_LOGO) return logo
+  return resolvedTheme === 'dark' ? DEFAULT_LOGO_DARK : DEFAULT_LOGO_LIGHT
 }
 
 function toNumber(value: unknown, fallback: number): number {
@@ -143,6 +157,7 @@ function preloadImage(
  */
 export function useSystemConfig(options: UseSystemConfigOptions = {}) {
   const { autoLoad = false } = options
+  const { resolvedTheme } = useTheme()
   const {
     config,
     loading,
@@ -151,6 +166,7 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
     setLoadedLogoUrl,
     setLoading,
   } = useSystemConfigStore()
+  const resolvedLogo = resolveSystemLogo(config.logo, resolvedTheme)
 
   // Load config from backend
   const loadConfig = useCallback(async () => {
@@ -172,33 +188,35 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
 
   // Preload logo image when URL changes
   useEffect(() => {
-    const { logo } = config
-
     // Skip if logo is already loaded
-    if (!logo || logo === loadedLogoUrl) return
+    if (!resolvedLogo || resolvedLogo === loadedLogoUrl) return
 
     // Preload new logo
     return preloadImage(
-      logo,
+      resolvedLogo,
       () => {
-        setLoadedLogoUrl(logo)
-        applyFaviconToDom(logo)
+        setLoadedLogoUrl(resolvedLogo)
+        applyFaviconToDom(resolvedLogo)
       },
       () => {
-        if (logo !== DEFAULT_LOGO) {
+        if (
+          resolvedLogo !== DEFAULT_LOGO_LIGHT &&
+          resolvedLogo !== DEFAULT_LOGO_DARK
+        ) {
           // eslint-disable-next-line no-console
-          console.error('Failed to load logo:', logo)
+          console.error('Failed to load logo:', resolvedLogo)
         }
         // Mark as loaded even on error to prevent infinite retry
-        setLoadedLogoUrl(logo)
+        setLoadedLogoUrl(resolvedLogo)
       }
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.logo, loadedLogoUrl, setLoadedLogoUrl])
+  }, [resolvedLogo, loadedLogoUrl, setLoadedLogoUrl])
 
   return {
     ...config,
+    logo: resolvedLogo,
     loading,
-    logoLoaded: config.logo === loadedLogoUrl && !!loadedLogoUrl,
+    logoLoaded: resolvedLogo === loadedLogoUrl && !!loadedLogoUrl,
   }
 }
