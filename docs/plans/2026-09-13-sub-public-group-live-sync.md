@@ -4,7 +4,7 @@
 
 **Goal:** Synchronize every public, enabled Sub group to New immediately after a successful group, model, channel, or pricing change.
 
-**Architecture:** Sub writes a complete group snapshot to an outbox in the same transaction as the source mutation. A retrying worker sends the signed snapshot to an idempotent New internal endpoint. New applies the snapshot transactionally to channels, abilities, pricing options, and group ratios, then refreshes runtime caches.
+**Architecture:** New polls a signed Sub snapshot endpoint every five seconds and submits the complete snapshot to an idempotent New internal endpoint. New applies active, non-exclusive groups to mirror channels, disables missing mirrors, updates pricing maps, and refreshes runtime caches. This local implementation keeps source mutations independent of New availability; an outbox is a later hardening option.
 
 **Tech Stack:** Go, Ent/PostgreSQL in Sub, GORM/PostgreSQL in New, Gin HTTP routing, Redis-backed runtime caches where already used by each service.
 
@@ -232,4 +232,3 @@ git -C /Users/alien/Workspace/sub2api commit -m "feat: configure public group sy
 git -C /Users/alien/Workspace/new-api add common
 git -C /Users/alien/Workspace/new-api commit -m "feat: configure Sub group sync receiver"
 ```
-

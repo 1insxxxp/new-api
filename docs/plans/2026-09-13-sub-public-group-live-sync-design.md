@@ -18,10 +18,12 @@ and abilities so stale models do not remain visible in the plaza.
 
 ## Recommended Architecture
 
-Sub writes an outbox event in the same database transaction as the successful
-group, channel, or pricing mutation. A background worker claims pending
-events and sends a complete group snapshot to New over an authenticated
-internal HTTP endpoint. The save request is not blocked by New availability.
+The first local implementation uses a complete snapshot pull: New polls a
+Sub internal endpoint every five seconds and submits the signed snapshot to
+its local authenticated apply endpoint. This keeps source mutations
+independent of New availability and converges changes without coupling every
+Sub write path to an HTTP call. An outbox can be added later if a deployment
+requires push-only delivery.
 
 New accepts the snapshot idempotently, applies the complete desired state to
 its channel and abilities records, updates model pricing and group ratios,
@@ -53,11 +55,10 @@ such as `按量vet/` remain visible while routing and pricing use the raw model.
 
 ### Sub
 
-- Add an outbox table/model and delivery worker.
-- Emit events from group create/update/delete, channel model/mapping updates,
-  and model pricing create/update/replace paths.
-- Build public-group snapshots after the mutation transaction commits.
-- Add retry, backoff, timeout, and delivery status logging.
+- Add a signed snapshot endpoint in Sub and a bounded polling worker in New.
+- Build snapshots from active, non-exclusive groups and active channels.
+- Reconcile missing snapshots by disabling stale mirror channels.
+- Add bounded timeout and error logging around each polling cycle.
 
 ### New
 
@@ -95,4 +96,3 @@ Development is performed on local `dev` branches:
 - `/Users/alien/Workspace/sub2api` already has `dev`.
 - `/Users/alien/Workspace/new-api` now has a new local `dev` branch from
   `main`.
-

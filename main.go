@@ -214,6 +214,7 @@ func main() {
 			common.FatalLog("failed to start HTTP server: " + err.Error())
 		}
 	}()
+	controller.StartPublicGroupSyncWorker()
 
 	time.Sleep(100 * time.Millisecond)
 
