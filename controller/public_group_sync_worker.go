@@ -17,7 +17,10 @@ import (
 	"time"
 )
 
-const publicGroupSyncPath = "/api/internal/sub-public-group-sync/snapshot"
+const (
+	publicGroupSyncSourcePath = "/api/internal/public-group-sync/snapshot"
+	publicGroupSyncTargetPath = "/api/internal/sub-public-group-sync/snapshot"
+)
 
 // StartPublicGroupSyncWorker starts the optional Sub -> New bridge. It is a
 // no-op unless both the source URL and shared secret are configured.
@@ -57,11 +60,11 @@ func runPublicGroupSyncWorker(source, target, secret string, interval time.Durat
 func syncPublicGroupsOnce(client *http.Client, source, target, secret string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	payload, err := signedPublicGroupSyncRequest(ctx, client, http.MethodGet, source+publicGroupSyncPath, nil, secret)
+	payload, err := signedPublicGroupSyncRequest(ctx, client, http.MethodGet, source+publicGroupSyncSourcePath, nil, secret)
 	if err != nil {
 		return fmt.Errorf("fetch snapshot: %w", err)
 	}
-	_, err = signedPublicGroupSyncRequest(ctx, client, http.MethodPost, target+publicGroupSyncPath, payload, secret)
+	_, err = signedPublicGroupSyncRequest(ctx, client, http.MethodPost, target+publicGroupSyncTargetPath, payload, secret)
 	if err != nil {
 		return fmt.Errorf("apply snapshot: %w", err)
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 )
@@ -35,11 +36,12 @@ func publicGroupSyncSignature(secret, timestamp string, body []byte) string {
 }
 
 func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
-	secret := os.Getenv("PUBLIC_GROUP_SYNC_SECRET")
+	secret := strings.TrimSpace(os.Getenv("PUBLIC_GROUP_SYNC_SECRET"))
 	if secret == "" {
 		c.Status(http.StatusNotFound)
 		return
 	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<20)
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(400, gin.H{"error": "invalid body"})
@@ -65,8 +67,21 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	}
 	oldSyncedModels := make(map[string]struct{})
 	protectedModels := make(map[string]struct{})
+	oldSyncedGroups := make(map[string]struct{})
+	protectedGroups := make(map[string]struct{})
 	for _, existing := range allChannels {
 		isSynced := strings.HasPrefix(existing.GetTag(), publicGroupSyncTagPrefix)
+		for _, group := range strings.Split(existing.Group, ",") {
+			group = strings.TrimSpace(group)
+			if group == "" {
+				continue
+			}
+			if isSynced {
+				oldSyncedGroups[group] = struct{}{}
+			} else if existing.Status == common.ChannelStatusEnabled {
+				protectedGroups[group] = struct{}{}
+			}
+		}
 		for _, name := range strings.Split(existing.Models, ",") {
 			name = strings.TrimSpace(name)
 			if name == "" {
@@ -80,14 +95,22 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 		}
 	}
 	newSyncedModels := make(map[string]struct{})
+	newSyncedPricedModels := make(map[string]struct{})
 	prices := ratio_setting.GetModelPriceMap()
 	ratios := ratio_setting.GetModelRatioCopy()
 	completionRatios := ratio_setting.GetCompletionRatioCopy()
 	cacheRatios := ratio_setting.GetCacheRatioCopy()
 	createCacheRatios := ratio_setting.GetCreateCacheRatioCopy()
+	groupRatios := ratio_setting.GetGroupRatioCopy()
+	usableGroups := setting.GetUserUsableGroupsCopy()
+	newSyncedGroups := make(map[string]struct{})
 	for _, snapshot := range envelope.Snapshots {
 		if snapshot.GroupID == 0 || snapshot.Version != PublicGroupSyncSnapshotVersion {
-			c.JSON(400, gin.H{"error": "invalid group_id"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group_id"})
+			return
+		}
+		if strings.TrimSpace(snapshot.GroupName) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "empty group name"})
 			return
 		}
 		for name, pricing := range snapshot.ModelPricing {
@@ -97,8 +120,22 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 				return
 			}
 		}
+	}
+	for _, snapshot := range envelope.Snapshots {
+		for _, name := range snapshot.Models {
+			if strings.TrimSpace(name) != "" {
+				if _, priced := snapshot.ModelPricing[name]; !priced {
+					continue
+				}
+				newSyncedPricedModels[name] = struct{}{}
+			}
+		}
 		tag := publicGroupSyncTagPrefix + strconv.FormatInt(snapshot.GroupID, 10)
 		seen[tag] = true
+		groupName := strings.TrimSpace(snapshot.GroupName)
+		newSyncedGroups[groupName] = struct{}{}
+		groupRatios[groupName] = snapshot.GroupRatio
+		usableGroups[groupName] = groupName
 		for _, name := range snapshot.Models {
 			if strings.TrimSpace(name) != "" {
 				newSyncedModels[name] = struct{}{}
@@ -133,6 +170,8 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			if mode == "per_request" || mode == "image" || mode == "video" {
 				if pricing.PerRequestPrice != nil {
 					prices[name] = *pricing.PerRequestPrice
+				} else {
+					delete(prices, name)
 				}
 				delete(ratios, name)
 				delete(completionRatios, name)
@@ -140,20 +179,28 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 				delete(createCacheRatios, name)
 				continue
 			}
+			delete(prices, name)
 			if pricing.InputPrice != nil {
 				// New API's token ratio unit is $0.002 per 1K input tokens;
 				// Sub stores token prices as USD per token.
 				ratios[name] = *pricing.InputPrice * 500000
-				delete(prices, name)
+			} else {
+				delete(ratios, name)
 			}
 			if pricing.InputPrice != nil && pricing.OutputPrice != nil && *pricing.InputPrice > 0 {
 				completionRatios[name] = *pricing.OutputPrice / *pricing.InputPrice
+			} else {
+				delete(completionRatios, name)
 			}
 			if pricing.CacheReadPrice != nil && pricing.InputPrice != nil && *pricing.InputPrice > 0 {
 				cacheRatios[name] = *pricing.CacheReadPrice / *pricing.InputPrice
+			} else {
+				delete(cacheRatios, name)
 			}
 			if pricing.CacheWritePrice != nil && pricing.InputPrice != nil && *pricing.InputPrice > 0 {
 				createCacheRatios[name] = *pricing.CacheWritePrice / *pricing.InputPrice
+			} else {
+				delete(createCacheRatios, name)
 			}
 		}
 	}
@@ -170,6 +217,29 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 		delete(cacheRatios, name)
 		delete(createCacheRatios, name)
 	}
+	for name := range newSyncedModels {
+		if _, priced := newSyncedPricedModels[name]; priced {
+			continue
+		}
+		if _, protected := protectedModels[name]; protected {
+			continue
+		}
+		delete(prices, name)
+		delete(ratios, name)
+		delete(completionRatios, name)
+		delete(cacheRatios, name)
+		delete(createCacheRatios, name)
+	}
+	for group := range oldSyncedGroups {
+		if _, stillSynced := newSyncedGroups[group]; stillSynced {
+			continue
+		}
+		if _, protected := protectedGroups[group]; protected {
+			continue
+		}
+		delete(groupRatios, group)
+		delete(usableGroups, group)
+	}
 	for _, ch := range allChannels {
 		if !strings.HasPrefix(ch.GetTag(), publicGroupSyncTagPrefix) {
 			continue
@@ -182,20 +252,26 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			}
 		}
 	}
-	if b, err := json.Marshal(prices); err == nil {
-		_ = ratio_setting.UpdateModelPriceByJSONString(string(b))
+	options := make(map[string]string, 7)
+	for key, value := range map[string]any{
+		"ModelPrice":       prices,
+		"ModelRatio":       ratios,
+		"CompletionRatio":  completionRatios,
+		"CacheRatio":       cacheRatios,
+		"CreateCacheRatio": createCacheRatios,
+		"GroupRatio":       groupRatios,
+		"UserUsableGroups": usableGroups,
+	} {
+		b, marshalErr := json.Marshal(value)
+		if marshalErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "marshal option " + key + ": " + marshalErr.Error()})
+			return
+		}
+		options[key] = string(b)
 	}
-	if b, err := json.Marshal(ratios); err == nil {
-		_ = ratio_setting.UpdateModelRatioByJSONString(string(b))
-	}
-	if b, err := json.Marshal(completionRatios); err == nil {
-		_ = ratio_setting.UpdateCompletionRatioByJSONString(string(b))
-	}
-	if b, err := json.Marshal(cacheRatios); err == nil {
-		_ = ratio_setting.UpdateCacheRatioByJSONString(string(b))
-	}
-	if b, err := json.Marshal(createCacheRatios); err == nil {
-		_ = ratio_setting.UpdateCreateCacheRatioByJSONString(string(b))
+	if err := model.UpdateOptionsBulk(options); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "persist pricing options: " + err.Error()})
+		return
 	}
 	model.InitChannelCache()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
