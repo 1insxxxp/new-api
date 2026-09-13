@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 )
@@ -103,6 +104,7 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	cacheRatios := ratio_setting.GetCacheRatioCopy()
 	createCacheRatios := ratio_setting.GetCreateCacheRatioCopy()
 	groupRatios := ratio_setting.GetGroupRatioCopy()
+	billingModes := billing_setting.GetBillingModeCopy()
 	usableGroups := setting.GetUserUsableGroupsCopy()
 	newSyncedGroups := make(map[string]struct{})
 	for _, snapshot := range envelope.Snapshots {
@@ -176,7 +178,20 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			if mode == "" {
 				mode = "token"
 			}
-			if mode == "per_request" || mode == "image" || mode == "video" {
+			if mode == billing_setting.BillingModeImage {
+				if pricing.PerRequestPrice != nil {
+					prices[name] = *pricing.PerRequestPrice
+				} else {
+					delete(prices, name)
+				}
+				billingModes[name] = billing_setting.BillingModeImage
+				delete(ratios, name)
+				delete(completionRatios, name)
+				delete(cacheRatios, name)
+				delete(createCacheRatios, name)
+				continue
+			}
+			if mode == "per_request" || mode == "video" {
 				if pricing.PerRequestPrice != nil {
 					prices[name] = *pricing.PerRequestPrice
 				} else {
@@ -186,8 +201,10 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 				delete(completionRatios, name)
 				delete(cacheRatios, name)
 				delete(createCacheRatios, name)
+				delete(billingModes, name)
 				continue
 			}
+			delete(billingModes, name)
 			delete(prices, name)
 			if pricing.InputPrice != nil {
 				// New API's token ratio unit is $0.002 per 1K input tokens;
@@ -225,6 +242,7 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 		delete(completionRatios, name)
 		delete(cacheRatios, name)
 		delete(createCacheRatios, name)
+		delete(billingModes, name)
 	}
 	for name := range newSyncedModels {
 		if _, priced := newSyncedPricedModels[name]; priced {
@@ -261,7 +279,12 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			}
 		}
 	}
-	options := make(map[string]string, 7)
+	billingModesJSON, err := json.Marshal(billingModes)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "marshal billing modes: " + err.Error()})
+		return
+	}
+	options := make(map[string]string, 8)
 	for key, value := range map[string]any{
 		"ModelPrice":       prices,
 		"ModelRatio":       ratios,
@@ -278,6 +301,7 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 		}
 		options[key] = string(b)
 	}
+	options["billing_setting.billing_mode"] = string(billingModesJSON)
 	if err := model.UpdateOptionsBulk(options); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "persist pricing options: " + err.Error()})
 		return

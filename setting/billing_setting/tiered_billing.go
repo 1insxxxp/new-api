@@ -11,6 +11,7 @@ import (
 const (
 	BillingModeRatio      = "ratio"
 	BillingModeTieredExpr = "tiered_expr"
+	BillingModeImage      = "image"
 	BillingModeField      = "billing_mode"
 	BillingExprField      = "billing_expr"
 )

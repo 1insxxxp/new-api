@@ -21,13 +21,15 @@ type PublicGroupSyncRequest struct {
 // PublicGroupSyncModel contains the public display name, upstream mapping and
 // prices needed to reproduce a group's billing behavior.
 type PublicGroupSyncModel struct {
-	Platform        string   `json:"platform"`
-	DisplayName     string   `json:"display_name"`
-	UpstreamModel   string   `json:"upstream_model"`
-	BillingMode     string   `json:"billing_mode"`
-	InputPrice      *float64 `json:"input_price,omitempty"`
-	OutputPrice     *float64 `json:"output_price,omitempty"`
-	PerRequestPrice *float64 `json:"per_request_price,omitempty"`
-	CacheWritePrice *float64 `json:"cache_write_price,omitempty"`
-	CacheReadPrice  *float64 `json:"cache_read_price,omitempty"`
+	Platform         string   `json:"platform"`
+	DisplayName      string   `json:"display_name"`
+	UpstreamModel    string   `json:"upstream_model"`
+	BillingMode      string   `json:"billing_mode"`
+	InputPrice       *float64 `json:"input_price,omitempty"`
+	OutputPrice      *float64 `json:"output_price,omitempty"`
+	ImageInputPrice  *float64 `json:"image_input_price,omitempty"`
+	ImageOutputPrice *float64 `json:"image_output_price,omitempty"`
+	PerRequestPrice  *float64 `json:"per_request_price,omitempty"`
+	CacheWritePrice  *float64 `json:"cache_write_price,omitempty"`
+	CacheReadPrice   *float64 `json:"cache_read_price,omitempty"`
 }

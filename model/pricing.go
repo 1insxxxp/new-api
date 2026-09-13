@@ -114,7 +114,20 @@ func getPricingEndpointTypesForAbility(ability AbilityWithChannel, advancedCusto
 	if config := advancedCustomConfigs[ability.ChannelId]; config != nil {
 		return config.SupportedEndpointTypesForModel(ability.Model)
 	}
-	return common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+	endpoints := common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+	if billing_setting.GetBillingMode(ability.Model) == billing_setting.BillingModeImage {
+		hasImageEndpoint := false
+		for _, endpoint := range endpoints {
+			if endpoint == constant.EndpointTypeImageGeneration {
+				hasImageEndpoint = true
+				break
+			}
+		}
+		if !hasImageEndpoint {
+			endpoints = append([]constant.EndpointType{constant.EndpointTypeImageGeneration}, endpoints...)
+		}
+	}
+	return endpoints
 }
 
 // loadPricingAdvancedCustomConfigs runs inside updatePricing while
@@ -400,11 +413,13 @@ func updatePricing() {
 			audioCompletionRatio := ratio_setting.GetAudioCompletionRatio(model)
 			pricing.AudioCompletionRatio = &audioCompletionRatio
 		}
-		if billingMode := billing_setting.GetBillingMode(model); billingMode == "tiered_expr" {
+		if billingMode := billing_setting.GetBillingMode(model); billingMode == billing_setting.BillingModeTieredExpr {
 			if expr, ok := billing_setting.GetBillingExpr(model); ok && strings.TrimSpace(expr) != "" {
 				pricing.BillingMode = billingMode
 				pricing.BillingExpr = expr
 			}
+		} else if billingMode == billing_setting.BillingModeImage {
+			pricing.BillingMode = billingMode
 		}
 		pricingMap = append(pricingMap, pricing)
 	}

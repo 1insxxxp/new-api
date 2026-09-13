@@ -17,6 +17,8 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -41,6 +43,8 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	originalCreateCacheRatio := ratio_setting.CreateCacheRatio2JSONString()
 	originalGroupRatio := ratio_setting.GroupRatio2JSONString()
 	originalUsableGroups := setting.UserUsableGroups2JSONString()
+	originalBillingModes, err := json.Marshal(billing_setting.GetBillingModeCopy())
+	require.NoError(t, err)
 	originalSecret, secretWasSet := os.LookupEnv("PUBLIC_GROUP_SYNC_SECRET")
 	model.DB, model.LOG_DB = db, db
 	common.MemoryCacheEnabled = false
@@ -57,6 +61,7 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 		_ = ratio_setting.UpdateCreateCacheRatioByJSONString(originalCreateCacheRatio)
 		_ = ratio_setting.UpdateGroupRatioByJSONString(originalGroupRatio)
 		_ = setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups)
+		_ = config.UpdateConfigFromMap(config.GlobalConfig.Get("billing_setting"), map[string]string{"billing_mode": string(originalBillingModes)})
 		if secretWasSet {
 			_ = os.Setenv("PUBLIC_GROUP_SYNC_SECRET", originalSecret)
 		} else {
@@ -70,18 +75,24 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 
 	inputPrice := 0.000004
 	outputPrice := 0.000012
+	imagePrice := 0.04
 	envelope := publicGroupSyncEnvelope{Version: PublicGroupSyncSnapshotVersion, Snapshots: []PublicGroupSyncRequest{{
 		Version:       PublicGroupSyncSnapshotVersion,
 		GroupID:       42,
 		GroupName:     "synced-group",
 		PublicEnabled: true,
 		GroupRatio:    2,
-		Models:        []string{"sync-model"},
+		Models:        []string{"sync-model", "sync-image-model"},
 		ModelMapping:  map[string]string{"sync-model": "upstream-model"},
-		ModelPricing: map[string]PublicGroupSyncModel{"sync-model": {
-			Platform: "openai", DisplayName: "sync-model", UpstreamModel: "upstream-model", BillingMode: "token",
-			InputPrice: &inputPrice, OutputPrice: &outputPrice,
-		}},
+		ModelPricing: map[string]PublicGroupSyncModel{
+			"sync-model": {
+				Platform: "openai", DisplayName: "sync-model", UpstreamModel: "upstream-model", BillingMode: "token",
+				InputPrice: &inputPrice, OutputPrice: &outputPrice,
+			},
+			"sync-image-model": {
+				Platform: "openai", DisplayName: "sync-image-model", BillingMode: "image",
+				PerRequestPrice: &imagePrice,
+			}},
 	}}}
 	body, err := json.Marshal(envelope)
 	require.NoError(t, err)
@@ -101,6 +112,7 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	require.NoError(t, db.Where("tag = ?", "sub-public-group:42").First(&channel).Error)
 	require.Equal(t, "synced-group", channel.Group)
 	require.Equal(t, common.ChannelStatusEnabled, channel.Status)
+	require.Contains(t, channel.Models, "sync-image-model")
 	var duplicate model.Channel
 	require.NoError(t, db.Where("key = ?", "sub-public-group-sync").First(&duplicate).Error)
 	require.Equal(t, common.ChannelStatusManuallyDisabled, duplicate.Status)
@@ -110,8 +122,13 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	require.NoError(t, db.First(&groupOption, "key = ?", "GroupRatio").Error)
 	require.NoError(t, db.First(&usableOption, "key = ?", "UserUsableGroups").Error)
 	require.Contains(t, ratioOption.Value, "sync-model")
+	require.NotContains(t, ratioOption.Value, "sync-image-model")
 	require.Contains(t, groupOption.Value, "synced-group")
 	require.Contains(t, usableOption.Value, "synced-group")
+	var billingModeOption model.Option
+	require.NoError(t, db.First(&billingModeOption, "key = ?", "billing_setting.billing_mode").Error)
+	require.Contains(t, billingModeOption.Value, "sync-image-model")
+	require.Contains(t, billingModeOption.Value, "image")
 
 	emptyBody, err := json.Marshal(publicGroupSyncEnvelope{Version: PublicGroupSyncSnapshotVersion, Snapshots: []PublicGroupSyncRequest{}})
 	require.NoError(t, err)
@@ -120,6 +137,8 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	require.Equal(t, common.ChannelStatusManuallyDisabled, channel.Status)
 	require.NoError(t, db.First(&groupOption, "key = ?", "GroupRatio").Error)
 	require.NotContains(t, groupOption.Value, "synced-group")
+	require.NoError(t, db.First(&billingModeOption, "key = ?", "billing_setting.billing_mode").Error)
+	require.NotContains(t, billingModeOption.Value, "sync-image-model")
 }
 
 func TestSelectPublicGroupSyncChannelPrefersExistingConfiguredChannel(t *testing.T) {

@@ -60,4 +60,15 @@ describe('model card mobile header', () => {
       'sm:row-start-1'
     )
   })
+
+  test('labels image billing as a per-image price', () => {
+    render(
+      <ModelCard
+        model={{ ...model, model_name: 'gpt-image-public', billing_mode: 'image' }}
+        onClick={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('/ Image')).toBeInTheDocument()
+  })
 })
