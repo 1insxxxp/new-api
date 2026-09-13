@@ -81,6 +81,25 @@ func insertPricingEndpointAbility(t *testing.T, channelID int, modelName string)
 	}).Error)
 }
 
+func TestGetAllEnableAbilityWithChannelsExcludesDisabledChannels(t *testing.T) {
+	resetPricingEndpointTestTables(t)
+
+	insertPricingEndpointChannel(t, 201, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
+	insertPricingEndpointChannel(t, 202, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 202).Update("status", common.ChannelStatusManuallyDisabled).Error)
+	insertPricingEndpointAbility(t, 201, "enabled-channel-model")
+	insertPricingEndpointAbility(t, 202, "disabled-channel-model")
+
+	abilities, err := GetAllEnableAbilityWithChannels()
+	require.NoError(t, err)
+	models := make(map[string]bool, len(abilities))
+	for _, ability := range abilities {
+		models[ability.Model] = true
+	}
+	assert.True(t, models["enabled-channel-model"])
+	assert.False(t, models["disabled-channel-model"])
+}
+
 func pricingEndpointAdvancedCustomConfig(routes ...dto.AdvancedCustomRoute) dto.ChannelOtherSettings {
 	return dto.ChannelOtherSettings{
 		AdvancedCustom: &dto.AdvancedCustomConfig{
