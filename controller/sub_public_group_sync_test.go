@@ -81,7 +81,7 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	envelope := publicGroupSyncEnvelope{Version: PublicGroupSyncSnapshotVersion, Snapshots: []PublicGroupSyncRequest{{
 		Version:       PublicGroupSyncSnapshotVersion,
 		GroupID:       42,
-		GroupName:     "synced-group",
+		GroupName:     " synced-group\t",
 		PublicEnabled: true,
 		GroupRatio:    2,
 		Models:        []string{"sync-model", "sync-image-model"},
@@ -112,9 +112,13 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 
 	var channel model.Channel
 	require.NoError(t, db.Where("tag = ?", "sub-public-group:42").First(&channel).Error)
+	require.Equal(t, "synced-group", channel.Name)
 	require.Equal(t, "synced-group", channel.Group)
 	require.Equal(t, common.ChannelStatusEnabled, channel.Status)
 	require.Contains(t, channel.Models, "sync-image-model")
+	var syncedAbility model.Ability
+	require.NoError(t, db.Where("model = ?", "sync-image-model").First(&syncedAbility).Error)
+	require.Equal(t, "synced-group", syncedAbility.Group)
 	var duplicate model.Channel
 	require.NoError(t, db.Where("key = ?", "sub-public-group-sync").First(&duplicate).Error)
 	require.Equal(t, common.ChannelStatusManuallyDisabled, duplicate.Status)

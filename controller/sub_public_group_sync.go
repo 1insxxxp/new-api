@@ -166,7 +166,7 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			}
 		}
 		mapping, _ := json.Marshal(snapshot.ModelMapping)
-		ch := &model.Channel{Key: "sub-public-group-sync", Name: snapshot.GroupName, Group: snapshot.GroupName, Models: strings.Join(snapshot.Models, ","), ModelMapping: stringPtr(string(mapping)), Tag: stringPtr(tag), Type: publicGroupSyncChannelType(snapshot), Status: common.ChannelStatusManuallyDisabled}
+		ch := &model.Channel{Key: "sub-public-group-sync", Name: groupName, Group: groupName, Models: strings.Join(snapshot.Models, ","), ModelMapping: stringPtr(string(mapping)), Tag: stringPtr(tag), Type: publicGroupSyncChannelType(snapshot), Status: common.ChannelStatusManuallyDisabled}
 		if snapshot.PublicEnabled && len(snapshot.Models) > 0 {
 			ch.Status = common.ChannelStatusEnabled
 		}
