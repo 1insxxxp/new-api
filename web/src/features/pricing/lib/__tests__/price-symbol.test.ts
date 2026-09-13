@@ -127,6 +127,20 @@ describe('pricing display mode symbols', () => {
     expect(formatRequestPrice(requestModel, true, 4, 7)).toBe('¥8')
   })
 
+  test('formatRequestPrice uses the selected group price without changing the model name', () => {
+    const groupPricedModel: PricingModel = {
+      ...requestModel,
+      enable_groups: ['default', 'premium'],
+      group_ratio: { default: 1, premium: 1 },
+      group_prices: { premium: 3 },
+    }
+
+    expect(formatRequestPrice(groupPricedModel, false, 1, 7, 'premium')).toBe(
+      '$21'
+    )
+    expect(groupPricedModel.model_name).toBe('request-model')
+  })
+
   test('formatFixedPrice uses the symbol selected by display mode', () => {
     const groupRatio = { premium: 1.5 }
 

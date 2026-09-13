@@ -94,6 +94,25 @@ export function getDisplayGroupRatio(
   return minRatio === Number.POSITIVE_INFINITY ? 1 : minRatio
 }
 
+/** Resolve a fixed price for the selected group without changing model_name. */
+export function getDisplayModelPrice(
+  model: PricingModel,
+  selectedGroup?: string
+): number {
+  const prices = model.group_prices || {}
+  if (selectedGroup && selectedGroup in prices) {
+    return prices[selectedGroup]
+  }
+
+  const availablePrices = Object.values(prices).filter(
+    (price) => typeof price === 'number' && Number.isFinite(price)
+  )
+  if (availablePrices.length > 0) {
+    return Math.min(...availablePrices)
+  }
+  return model.model_price || 0
+}
+
 /**
  * Replace model placeholder in endpoint path
  */

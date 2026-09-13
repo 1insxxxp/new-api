@@ -42,6 +42,7 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	originalCacheRatio := ratio_setting.CacheRatio2JSONString()
 	originalCreateCacheRatio := ratio_setting.CreateCacheRatio2JSONString()
 	originalGroupRatio := ratio_setting.GroupRatio2JSONString()
+	originalGroupModelPrice := ratio_setting.GroupModelPrice2JSONString()
 	originalUsableGroups := setting.UserUsableGroups2JSONString()
 	originalBillingModes, err := json.Marshal(billing_setting.GetBillingModeCopy())
 	require.NoError(t, err)
@@ -60,6 +61,7 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 		_ = ratio_setting.UpdateCacheRatioByJSONString(originalCacheRatio)
 		_ = ratio_setting.UpdateCreateCacheRatioByJSONString(originalCreateCacheRatio)
 		_ = ratio_setting.UpdateGroupRatioByJSONString(originalGroupRatio)
+		_ = ratio_setting.UpdateGroupModelPriceByJSONString(originalGroupModelPrice)
 		_ = setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups)
 		_ = config.UpdateConfigFromMap(config.GlobalConfig.Get("billing_setting"), map[string]string{"billing_mode": string(originalBillingModes)})
 		if secretWasSet {
@@ -129,6 +131,11 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	require.NoError(t, db.First(&billingModeOption, "key = ?", "billing_setting.billing_mode").Error)
 	require.Contains(t, billingModeOption.Value, "sync-image-model")
 	require.Contains(t, billingModeOption.Value, "image")
+	var groupModelPriceOption model.Option
+	require.NoError(t, db.First(&groupModelPriceOption, "key = ?", "GroupModelPrice").Error)
+	var groupModelPrices map[string]map[string]float64
+	require.NoError(t, json.Unmarshal([]byte(groupModelPriceOption.Value), &groupModelPrices))
+	require.Equal(t, imagePrice, groupModelPrices["synced-group"]["sync-image-model"])
 
 	emptyBody, err := json.Marshal(publicGroupSyncEnvelope{Version: PublicGroupSyncSnapshotVersion, Snapshots: []PublicGroupSyncRequest{}})
 	require.NoError(t, err)
@@ -139,6 +146,8 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	require.NotContains(t, groupOption.Value, "synced-group")
 	require.NoError(t, db.First(&billingModeOption, "key = ?", "billing_setting.billing_mode").Error)
 	require.NotContains(t, billingModeOption.Value, "sync-image-model")
+	require.NoError(t, db.First(&groupModelPriceOption, "key = ?", "GroupModelPrice").Error)
+	require.NotContains(t, groupModelPriceOption.Value, "sync-image-model")
 }
 
 func TestSelectPublicGroupSyncChannelPrefersExistingConfiguredChannel(t *testing.T) {
@@ -172,6 +181,7 @@ func TestReceivePublicGroupSyncImagePricingWinsAcrossGroups(t *testing.T) {
 	originalCacheRatio := ratio_setting.CacheRatio2JSONString()
 	originalCreateCacheRatio := ratio_setting.CreateCacheRatio2JSONString()
 	originalGroupRatio := ratio_setting.GroupRatio2JSONString()
+	originalGroupModelPrice := ratio_setting.GroupModelPrice2JSONString()
 	originalUsableGroups := setting.UserUsableGroups2JSONString()
 	originalBillingModes, err := json.Marshal(billing_setting.GetBillingModeCopy())
 	require.NoError(t, err)
@@ -190,6 +200,7 @@ func TestReceivePublicGroupSyncImagePricingWinsAcrossGroups(t *testing.T) {
 		_ = ratio_setting.UpdateCacheRatioByJSONString(originalCacheRatio)
 		_ = ratio_setting.UpdateCreateCacheRatioByJSONString(originalCreateCacheRatio)
 		_ = ratio_setting.UpdateGroupRatioByJSONString(originalGroupRatio)
+		_ = ratio_setting.UpdateGroupModelPriceByJSONString(originalGroupModelPrice)
 		_ = setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups)
 		_ = config.UpdateConfigFromMap(config.GlobalConfig.Get("billing_setting"), map[string]string{"billing_mode": string(originalBillingModes)})
 		if secretWasSet {

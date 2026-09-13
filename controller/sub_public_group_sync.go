@@ -117,6 +117,7 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	groupRatios := ratio_setting.GetGroupRatioCopy()
 	billingModes := billing_setting.GetBillingModeCopy()
 	usableGroups := setting.GetUserUsableGroupsCopy()
+	groupModelPrices := make(map[string]map[string]float64)
 	newSyncedGroups := make(map[string]struct{})
 	for _, snapshot := range envelope.Snapshots {
 		if snapshot.GroupID == 0 || snapshot.Version != PublicGroupSyncSnapshotVersion {
@@ -150,6 +151,15 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 		newSyncedGroups[groupName] = struct{}{}
 		groupRatios[groupName] = snapshot.GroupRatio
 		usableGroups[groupName] = groupName
+		for name, pricing := range snapshot.ModelPricing {
+			mode := strings.ToLower(strings.TrimSpace(pricing.BillingMode))
+			if (mode == billing_setting.BillingModeImage || mode == "per_request") && pricing.PerRequestPrice != nil {
+				if groupModelPrices[groupName] == nil {
+					groupModelPrices[groupName] = make(map[string]float64)
+				}
+				groupModelPrices[groupName][name] = *pricing.PerRequestPrice
+			}
+		}
 		for _, name := range snapshot.Models {
 			if strings.TrimSpace(name) != "" {
 				newSyncedModels[name] = struct{}{}
@@ -309,6 +319,7 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 		"CreateCacheRatio": createCacheRatios,
 		"GroupRatio":       groupRatios,
 		"UserUsableGroups": usableGroups,
+		"GroupModelPrice":  groupModelPrices,
 	} {
 		b, marshalErr := json.Marshal(value)
 		if marshalErr != nil {
