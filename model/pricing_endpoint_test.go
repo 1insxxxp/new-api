@@ -100,6 +100,39 @@ func TestGetAllEnableAbilityWithChannelsExcludesDisabledChannels(t *testing.T) {
 	assert.False(t, models["disabled-channel-model"])
 }
 
+func TestGetAllEnableAbilityWithChannelsPrefersSyncedGroups(t *testing.T) {
+	resetPricingEndpointTestTables(t)
+
+	insertPricingEndpointChannel(t, 203, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
+	localGroup := "synced-group"
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", 203).Updates(map[string]any{
+		"group": localGroup,
+		"name":  localGroup,
+	}).Error)
+	syncedTag := "sub-public-group:42"
+	syncedChannel := &Channel{
+		Id:     204,
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    "synced-key",
+		Status: common.ChannelStatusEnabled,
+		Name:   localGroup,
+		Group:  localGroup,
+		Tag:    &syncedTag,
+	}
+	require.NoError(t, DB.Create(syncedChannel).Error)
+	insertPricingEndpointAbility(t, 203, "local-model")
+	insertPricingEndpointAbility(t, 204, "synced-model")
+
+	abilities, err := GetAllEnableAbilityWithChannels()
+	require.NoError(t, err)
+	models := make(map[string]bool, len(abilities))
+	for _, ability := range abilities {
+		models[ability.Model] = true
+	}
+	assert.False(t, models["local-model"])
+	assert.True(t, models["synced-model"])
+}
+
 func pricingEndpointAdvancedCustomConfig(routes ...dto.AdvancedCustomRoute) dto.ChannelOtherSettings {
 	return dto.ChannelOtherSettings{
 		AdvancedCustom: &dto.AdvancedCustomConfig{
