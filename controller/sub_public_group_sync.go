@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -152,11 +153,19 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			return
 		}
 		if len(found) > 0 {
-			ch.Id = found[0].Id
-			ch.Key = found[0].Key
+			canonical, duplicates := selectPublicGroupSyncChannel(found)
+			ch.Id = canonical.Id
+			ch.Key = canonical.Key
 			if err := ch.Update(); err != nil {
 				c.JSON(500, gin.H{"error": err.Error()})
 				return
+			}
+			for _, duplicate := range duplicates {
+				duplicate.Status = common.ChannelStatusManuallyDisabled
+				if err := duplicate.Update(); err != nil {
+					c.JSON(500, gin.H{"error": "disable duplicate channel: " + err.Error()})
+					return
+				}
 			}
 		} else if err := ch.Insert(); err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
@@ -275,6 +284,19 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	}
 	model.InitChannelCache()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func selectPublicGroupSyncChannel(channels []*model.Channel) (*model.Channel, []*model.Channel) {
+	ordered := append([]*model.Channel(nil), channels...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		iConfigured := strings.TrimSpace(ordered[i].Key) != "sub-public-group-sync"
+		jConfigured := strings.TrimSpace(ordered[j].Key) != "sub-public-group-sync"
+		if iConfigured != jConfigured {
+			return iConfigured
+		}
+		return ordered[i].Id < ordered[j].Id
+	})
+	return ordered[0], ordered[1:]
 }
 
 func publicGroupSyncChannelType(snapshot PublicGroupSyncRequest) int {

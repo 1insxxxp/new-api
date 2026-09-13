@@ -85,6 +85,15 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	}}}
 	body, err := json.Marshal(envelope)
 	require.NoError(t, err)
+	legacyTag := "sub-public-group:42"
+	require.NoError(t, db.Create(&model.Channel{
+		Key: "real-upstream-key", Name: "old-name", Group: "old-name", Models: "sync-model",
+		Tag: &legacyTag, Status: common.ChannelStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&model.Channel{
+		Key: "sub-public-group-sync", Name: "mirror-name", Group: "mirror-name", Models: "sync-model",
+		Tag: &legacyTag, Status: common.ChannelStatusEnabled,
+	}).Error)
 	status := postPublicGroupSyncTestRequest(t, body, "test-secret")
 	require.Equal(t, http.StatusOK, status)
 
@@ -92,6 +101,9 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	require.NoError(t, db.Where("tag = ?", "sub-public-group:42").First(&channel).Error)
 	require.Equal(t, "synced-group", channel.Group)
 	require.Equal(t, common.ChannelStatusEnabled, channel.Status)
+	var duplicate model.Channel
+	require.NoError(t, db.Where("key = ?", "sub-public-group-sync").First(&duplicate).Error)
+	require.Equal(t, common.ChannelStatusManuallyDisabled, duplicate.Status)
 
 	var ratioOption, groupOption, usableOption model.Option
 	require.NoError(t, db.First(&ratioOption, "key = ?", "ModelRatio").Error)
@@ -108,6 +120,19 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	require.Equal(t, common.ChannelStatusManuallyDisabled, channel.Status)
 	require.NoError(t, db.First(&groupOption, "key = ?", "GroupRatio").Error)
 	require.NotContains(t, groupOption.Value, "synced-group")
+}
+
+func TestSelectPublicGroupSyncChannelPrefersExistingConfiguredChannel(t *testing.T) {
+	legacyKey := "real-upstream-key"
+	mirrorKey := "sub-public-group-sync"
+	legacy := &model.Channel{Id: 17, Key: legacyKey, Status: common.ChannelStatusEnabled}
+	mirror := &model.Channel{Id: 36, Key: mirrorKey, Status: common.ChannelStatusEnabled}
+
+	canonical, duplicates := selectPublicGroupSyncChannel([]*model.Channel{mirror, legacy})
+
+	require.Same(t, legacy, canonical)
+	require.Len(t, duplicates, 1)
+	require.Same(t, mirror, duplicates[0])
 }
 
 func postPublicGroupSyncTestRequest(t *testing.T, body []byte, secret string) int {
