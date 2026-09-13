@@ -98,6 +98,17 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	}
 	newSyncedModels := make(map[string]struct{})
 	newSyncedPricedModels := make(map[string]struct{})
+	// A model can be exposed by more than one public group. Image pricing has
+	// precedence over token/request pricing so a later ordinary group cannot
+	// downgrade an image model back to the default billing mode.
+	imageModels := make(map[string]struct{})
+	for _, snapshot := range envelope.Snapshots {
+		for name, pricing := range snapshot.ModelPricing {
+			if strings.EqualFold(strings.TrimSpace(pricing.BillingMode), billing_setting.BillingModeImage) {
+				imageModels[name] = struct{}{}
+			}
+		}
+	}
 	prices := ratio_setting.GetModelPriceMap()
 	ratios := ratio_setting.GetModelRatioCopy()
 	completionRatios := ratio_setting.GetCompletionRatioCopy()
@@ -177,6 +188,11 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			mode := strings.ToLower(strings.TrimSpace(pricing.BillingMode))
 			if mode == "" {
 				mode = "token"
+			}
+			if mode != billing_setting.BillingModeImage {
+				if _, image := imageModels[name]; image {
+					continue
+				}
 			}
 			if mode == billing_setting.BillingModeImage {
 				if pricing.PerRequestPrice != nil {

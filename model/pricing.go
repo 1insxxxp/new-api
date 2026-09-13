@@ -108,13 +108,16 @@ func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
 }
 
 func getPricingEndpointTypesForAbility(ability AbilityWithChannel, advancedCustomConfigs map[int]*dto.AdvancedCustomConfig) []constant.EndpointType {
-	if ability.ChannelType != constant.ChannelTypeAdvancedCustom {
-		return common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+	var endpoints []constant.EndpointType
+	if ability.ChannelType == constant.ChannelTypeAdvancedCustom {
+		if config := advancedCustomConfigs[ability.ChannelId]; config != nil {
+			endpoints = config.SupportedEndpointTypesForModel(ability.Model)
+		} else {
+			endpoints = common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+		}
+	} else {
+		endpoints = common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
 	}
-	if config := advancedCustomConfigs[ability.ChannelId]; config != nil {
-		return config.SupportedEndpointTypesForModel(ability.Model)
-	}
-	endpoints := common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
 	if billing_setting.GetBillingMode(ability.Model) == billing_setting.BillingModeImage {
 		hasImageEndpoint := false
 		for _, endpoint := range endpoints {

@@ -1,12 +1,15 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +32,28 @@ func resetPricingEndpointTestTables(t *testing.T) {
 		InvalidatePricingCache()
 		common.MemoryCacheEnabled = originalMemoryCacheEnabled
 	})
+}
+
+func TestPricingEndpointTypesAddImageEndpointForSyncedImageModel(t *testing.T) {
+	original := billing_setting.GetBillingModeCopy()
+	updated := make(map[string]string, len(original)+1)
+	for name, mode := range original {
+		updated[name] = mode
+	}
+	updated["synced-image-model"] = billing_setting.BillingModeImage
+	encoded, err := json.Marshal(updated)
+	require.NoError(t, err)
+	require.NoError(t, config.UpdateConfigFromMap(config.GlobalConfig.Get("billing_setting"), map[string]string{"billing_mode": string(encoded)}))
+	t.Cleanup(func() {
+		encoded, _ := json.Marshal(original)
+		_ = config.UpdateConfigFromMap(config.GlobalConfig.Get("billing_setting"), map[string]string{"billing_mode": string(encoded)})
+	})
+
+	endpoints := getPricingEndpointTypesForAbility(AbilityWithChannel{
+		Ability:     Ability{Model: "synced-image-model"},
+		ChannelType: constant.ChannelTypeOpenAI,
+	}, nil)
+	require.Contains(t, endpoints, constant.EndpointTypeImageGeneration)
 }
 
 func insertPricingEndpointChannel(t *testing.T, channelID int, channelType int, settings dto.ChannelOtherSettings) {

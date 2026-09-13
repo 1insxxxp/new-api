@@ -154,6 +154,72 @@ func TestSelectPublicGroupSyncChannelPrefersExistingConfiguredChannel(t *testing
 	require.Same(t, mirror, duplicates[0])
 }
 
+func TestReceivePublicGroupSyncImagePricingWinsAcrossGroups(t *testing.T) {
+	// This regression test covers a model that is listed by both an image group
+	// and a normal group. The image billing mode must remain authoritative.
+	gin.SetMode(gin.TestMode)
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.Option{}))
+
+	originalDB, originalLogDB := model.DB, model.LOG_DB
+	originalMemoryCache := common.MemoryCacheEnabled
+	originalOptionMap := common.OptionMap
+	originalModelPrice := ratio_setting.ModelPrice2JSONString()
+	originalModelRatio := ratio_setting.ModelRatio2JSONString()
+	originalCompletionRatio := ratio_setting.CompletionRatio2JSONString()
+	originalCacheRatio := ratio_setting.CacheRatio2JSONString()
+	originalCreateCacheRatio := ratio_setting.CreateCacheRatio2JSONString()
+	originalGroupRatio := ratio_setting.GroupRatio2JSONString()
+	originalUsableGroups := setting.UserUsableGroups2JSONString()
+	originalBillingModes, err := json.Marshal(billing_setting.GetBillingModeCopy())
+	require.NoError(t, err)
+	originalSecret, secretWasSet := os.LookupEnv("PUBLIC_GROUP_SYNC_SECRET")
+	model.DB, model.LOG_DB = db, db
+	common.MemoryCacheEnabled = false
+	common.OptionMap = make(map[string]string)
+	require.NoError(t, os.Setenv("PUBLIC_GROUP_SYNC_SECRET", "test-secret"))
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = originalDB, originalLogDB
+		common.MemoryCacheEnabled = originalMemoryCache
+		common.OptionMap = originalOptionMap
+		_ = ratio_setting.UpdateModelPriceByJSONString(originalModelPrice)
+		_ = ratio_setting.UpdateModelRatioByJSONString(originalModelRatio)
+		_ = ratio_setting.UpdateCompletionRatioByJSONString(originalCompletionRatio)
+		_ = ratio_setting.UpdateCacheRatioByJSONString(originalCacheRatio)
+		_ = ratio_setting.UpdateCreateCacheRatioByJSONString(originalCreateCacheRatio)
+		_ = ratio_setting.UpdateGroupRatioByJSONString(originalGroupRatio)
+		_ = setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups)
+		_ = config.UpdateConfigFromMap(config.GlobalConfig.Get("billing_setting"), map[string]string{"billing_mode": string(originalBillingModes)})
+		if secretWasSet {
+			_ = os.Setenv("PUBLIC_GROUP_SYNC_SECRET", originalSecret)
+		} else {
+			_ = os.Unsetenv("PUBLIC_GROUP_SYNC_SECRET")
+		}
+		sqlDB, _ := db.DB()
+		if sqlDB != nil {
+			_ = sqlDB.Close()
+		}
+	})
+
+	imagePrice := 0.04
+	image := PublicGroupSyncModel{Platform: "openai", DisplayName: "shared-image-model", BillingMode: "image", PerRequestPrice: &imagePrice}
+	normal := PublicGroupSyncModel{Platform: "openai", DisplayName: "shared-image-model", BillingMode: "token"}
+	envelope := publicGroupSyncEnvelope{Version: PublicGroupSyncSnapshotVersion, Snapshots: []PublicGroupSyncRequest{
+		{Version: PublicGroupSyncSnapshotVersion, GroupID: 1, GroupName: "image-group", PublicEnabled: true, Models: []string{"shared-image-model"}, ModelPricing: map[string]PublicGroupSyncModel{"shared-image-model": image}},
+		{Version: PublicGroupSyncSnapshotVersion, GroupID: 2, GroupName: "normal-group", PublicEnabled: true, Models: []string{"shared-image-model"}, ModelPricing: map[string]PublicGroupSyncModel{"shared-image-model": normal}},
+	}}
+	body, err := json.Marshal(envelope)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, postPublicGroupSyncTestRequest(t, body, "test-secret"))
+
+	require.Equal(t, billing_setting.BillingModeImage, billing_setting.GetBillingMode("shared-image-model"))
+	price, ok := ratio_setting.GetModelPrice("shared-image-model", false)
+	require.True(t, ok)
+	require.Equal(t, imagePrice, price)
+}
+
 func postPublicGroupSyncTestRequest(t *testing.T, body []byte, secret string) int {
 	t.Helper()
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
