@@ -102,10 +102,15 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	// precedence over token/request pricing so a later ordinary group cannot
 	// downgrade an image model back to the default billing mode.
 	imageModels := make(map[string]struct{})
+	tokenModels := make(map[string]struct{})
 	for _, snapshot := range envelope.Snapshots {
 		for name, pricing := range snapshot.ModelPricing {
-			if strings.EqualFold(strings.TrimSpace(pricing.BillingMode), billing_setting.BillingModeImage) {
+			mode := strings.ToLower(strings.TrimSpace(pricing.BillingMode))
+			if mode == billing_setting.BillingModeImage {
 				imageModels[name] = struct{}{}
+			}
+			if (mode == "" || mode == "token") && pricing.InputPrice != nil {
+				tokenModels[name] = struct{}{}
 			}
 		}
 	}
@@ -218,6 +223,11 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 				continue
 			}
 			if mode == "per_request" || mode == "video" {
+				// Keep token prices for shared models; fixed prices are stored per
+				// group above so snapshot order cannot change their billing mode.
+				if _, token := tokenModels[name]; token {
+					continue
+				}
 				if pricing.PerRequestPrice != nil {
 					prices[name] = *pricing.PerRequestPrice
 				} else {
@@ -311,7 +321,20 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 		return
 	}
 	options := make(map[string]string, 8)
+	// Keep display ordering separate from the pricing application order.
+	orderedSnapshots := append([]PublicGroupSyncRequest(nil), envelope.Snapshots...)
+	sort.SliceStable(orderedSnapshots, func(i, j int) bool {
+		if orderedSnapshots[i].SortOrder != orderedSnapshots[j].SortOrder {
+			return orderedSnapshots[i].SortOrder < orderedSnapshots[j].SortOrder
+		}
+		return orderedSnapshots[i].GroupID < orderedSnapshots[j].GroupID
+	})
+	groupOrder := make([]string, 0, len(orderedSnapshots))
+	for _, snapshot := range orderedSnapshots {
+		groupOrder = append(groupOrder, strings.TrimSpace(snapshot.GroupName))
+	}
 	for key, value := range map[string]any{
+		"PublicGroupOrder": groupOrder,
 		"ModelPrice":       prices,
 		"ModelRatio":       ratios,
 		"CompletionRatio":  completionRatios,

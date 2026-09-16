@@ -22,6 +22,7 @@ import { useMemo } from 'react'
 import { useStatus } from '@/hooks/use-status'
 
 import { getPricing } from '../api'
+import { orderGroups } from '../lib/model-helpers'
 
 export function usePricingData() {
   const { status } = useStatus()
@@ -42,6 +43,17 @@ export function usePricingData() {
     [status?.usd_exchange_rate, priceRate]
   )
 
+  const groupOrder = useMemo(
+    () => orderGroups(Object.keys(data?.usable_group ?? {}), data?.group_order),
+    [data]
+  )
+  const usableGroup = useMemo(() => {
+    if (!data) return {}
+    return Object.fromEntries(
+      groupOrder.map((group) => [group, data.usable_group[group]])
+    )
+  }, [data, groupOrder])
+
   const models = useMemo(() => {
     if (!data?.data || !data?.vendors) return []
 
@@ -53,6 +65,7 @@ export function usePricingData() {
         : undefined
       return {
         ...model,
+        enable_groups: orderGroups(model.enable_groups ?? [], groupOrder),
         key: model.model_name,
         vendor_name: vendor?.name,
         vendor_icon: vendor?.icon,
@@ -60,13 +73,14 @@ export function usePricingData() {
         group_ratio: data.group_ratio,
       }
     })
-  }, [data])
+  }, [data, groupOrder])
 
   return {
     models,
     vendors: data?.vendors ?? [],
     groupRatio: data?.group_ratio ?? {},
-    usableGroup: data?.usable_group ?? {},
+    usableGroup,
+    groupOrder,
     endpointMap: data?.supported_endpoint ?? {},
     autoGroups: data?.auto_groups ?? [],
     isLoading,

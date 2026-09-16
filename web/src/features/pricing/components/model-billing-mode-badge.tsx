@@ -26,6 +26,7 @@ import type { PricingModel } from '../types'
 
 interface ModelBillingModeBadgeProps {
   model: PricingModel
+  selectedGroup?: string
   className?: string
 }
 
@@ -40,7 +41,7 @@ export function ModelBillingModeBadge(props: ModelBillingModeBadgeProps) {
   } else if (props.model.billing_mode === 'image') {
     label = t('Image')
     variant = 'green'
-  } else if (isTokenBasedModel(props.model)) {
+  } else if (isTokenBasedModel(props.model, props.selectedGroup)) {
     label = t('Token-based')
     variant = 'info'
   }

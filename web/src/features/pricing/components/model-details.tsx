@@ -869,7 +869,12 @@ function GroupPricingSection(props: {
     [props.model, props.usableGroup]
   )
 
-  const isTokenBased = isTokenBasedModel(props.model)
+  const hasTokenBasedGroup = availableGroups.some((group) =>
+    isTokenBasedModel(props.model, group)
+  )
+  const hasFixedPriceGroup = availableGroups.some(
+    (group) => !isTokenBasedModel(props.model, group)
+  )
   const tokenUnitLabel = props.tokenUnit === 'K' ? '1K' : '1M'
 
   const extraPriceTypes = useMemo(() => {
@@ -1069,7 +1074,7 @@ function GroupPricingSection(props: {
             cellClassName: 'text-muted-foreground py-2.5 font-mono',
             cell: (group) => `${props.groupRatio[group] || 1}x`,
           },
-          ...(isTokenBased
+          ...(hasTokenBasedGroup
             ? [
                 {
                   id: 'input',
@@ -1093,7 +1098,9 @@ function GroupPricingSection(props: {
                   cell: (group: string) => renderGroupPrice(group, ep.type),
                 })),
               ]
-            : [
+            : []),
+          ...(hasFixedPriceGroup
+            ? [
                 {
                   id: 'price',
                   header: t('Price'),
@@ -1101,11 +1108,12 @@ function GroupPricingSection(props: {
                   cellClassName: 'py-2.5 text-right font-mono',
                   cell: renderFixedGroupPrice,
                 },
-              ]),
+              ]
+            : []),
         ]}
       />
       <div className='-mx-4 sm:mx-0'>
-        {isTokenBased && (
+        {hasTokenBasedGroup && (
           <p className='text-muted-foreground/40 mt-1.5 px-4 text-[10px] sm:px-0'>
             {t('Prices shown per')} {tokenUnitLabel} tokens
           </p>

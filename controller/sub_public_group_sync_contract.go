@@ -9,6 +9,7 @@ type PublicGroupSyncRequest struct {
 	Version       int                             `json:"version"`
 	Revision      int64                           `json:"revision"`
 	GroupID       int64                           `json:"group_id"`
+	SortOrder     int                             `json:"sort_order"`
 	GroupName     string                          `json:"group_name"`
 	PublicEnabled bool                            `json:"public_enabled"`
 	GroupRatio    float64                         `json:"group_ratio"`

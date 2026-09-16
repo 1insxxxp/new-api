@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"sort"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -70,10 +72,37 @@ func GetPricing(c *gin.Context) {
 		"vendors":            model.GetVendors(),
 		"group_ratio":        groupRatio,
 		"usable_group":       usableGroup,
+		"group_order":        getPricingGroupOrder(usableGroup),
 		"supported_endpoint": model.GetSupportedEndpointMap(),
 		"auto_groups":        service.GetUserAutoGroup(group),
 		"pricing_version":    "a42d372ccf0b5dd13ecf71203521f9d2",
 	})
+}
+
+func getPricingGroupOrder(usableGroup map[string]string) []string {
+	common.OptionMapRWMutex.RLock()
+	stored := common.OptionMap["PublicGroupOrder"]
+	common.OptionMapRWMutex.RUnlock()
+	var preferred []string
+	if stored != "" {
+		_ = common.UnmarshalJsonStr(stored, &preferred)
+	}
+	ordered := make([]string, 0, len(usableGroup))
+	seen := make(map[string]bool, len(usableGroup))
+	for _, group := range preferred {
+		if _, available := usableGroup[group]; available && !seen[group] {
+			ordered = append(ordered, group)
+			seen[group] = true
+		}
+	}
+	remaining := make([]string, 0)
+	for group := range usableGroup {
+		if !seen[group] {
+			remaining = append(remaining, group)
+		}
+	}
+	sort.Strings(remaining)
+	return append(ordered, remaining...)
 }
 
 func ResetModelRatio(c *gin.Context) {

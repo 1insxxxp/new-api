@@ -34,9 +34,22 @@ export function getAvailableGroups(
     ? model.enable_groups
     : []
 
-  return Object.keys(usableGroup)
+  return modelEnableGroups
     .filter((g) => !EXCLUDED_GROUPS.includes(g))
-    .filter((g) => modelEnableGroups.includes(g))
+    .filter((g) => Object.hasOwn(usableGroup, g))
+}
+
+export function orderGroups(
+  groups: string[],
+  preferred: string[] = []
+): string[] {
+  const available = new Set(groups)
+  return [
+    ...new Set([
+      ...preferred.filter((group) => available.has(group)),
+      ...groups,
+    ]),
+  ]
 }
 
 /**
@@ -113,6 +126,23 @@ export function getDisplayModelPrice(
   return model.model_price || 0
 }
 
+export function getResolvedQuotaType(
+  model: PricingModel,
+  selectedGroup?: string
+): number {
+  if (!selectedGroup || selectedGroup === FILTER_ALL) {
+    return model.quota_type
+  }
+  const prices = model.group_prices || {}
+  if (Object.hasOwn(prices, selectedGroup)) {
+    return QUOTA_TYPE_VALUES.REQUEST
+  }
+  if (Object.keys(prices).length > 0 && Number(model.model_ratio) > 0) {
+    return QUOTA_TYPE_VALUES.TOKEN
+  }
+  return model.quota_type
+}
+
 /**
  * Replace model placeholder in endpoint path
  */
@@ -123,6 +153,9 @@ export function replaceModelInPath(path: string, modelName: string): string {
 /**
  * Check if model is token-based pricing
  */
-export function isTokenBasedModel(model: PricingModel): boolean {
-  return model.quota_type === QUOTA_TYPE_VALUES.TOKEN
+export function isTokenBasedModel(
+  model: PricingModel,
+  selectedGroup?: string
+): boolean {
+  return getResolvedQuotaType(model, selectedGroup) === QUOTA_TYPE_VALUES.TOKEN
 }

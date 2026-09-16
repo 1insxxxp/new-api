@@ -25,6 +25,7 @@ import {
 
 import type { PricingModel } from '../../types'
 import { formatDynamicUnitPrice } from '../dynamic-price'
+import { isTokenBasedModel } from '../model-helpers'
 import {
   formatFixedPrice,
   formatGroupPrice,
@@ -150,6 +151,36 @@ describe('pricing display mode symbols', () => {
     expect(
       formatFixedPrice(requestModel, 'premium', true, 4, 7, groupRatio)
     ).toBe('¥12')
+  })
+
+  test('same model resolves token pricing in one group and fixed pricing in another', () => {
+    const sharedModel: PricingModel = {
+      ...requestModel,
+      model_name: 'shared-model',
+      model_ratio: 8,
+      completion_ratio: 3.5,
+      enable_groups: ['standard', 'premium'],
+      group_ratio: { standard: 1, premium: 1 },
+      group_prices: { premium: 0.3 },
+    }
+
+    expect(isTokenBasedModel(sharedModel, 'standard')).toBe(true)
+    expect(isTokenBasedModel(sharedModel, 'premium')).toBe(false)
+    expect(
+      formatPrice(sharedModel, 'input', 'M', false, 1, 1, 'standard')
+    ).toBe('$112')
+    expect(formatRequestPrice(sharedModel, false, 1, 1, 'standard')).toBe('-')
+    expect(formatRequestPrice(sharedModel, false, 1, 1, 'premium')).toBe('$2.1')
+    expect(
+      formatFixedPrice(
+        sharedModel,
+        'standard',
+        false,
+        1,
+        1,
+        sharedModel.group_ratio || {}
+      )
+    ).toBe('-')
   })
 
   test('formatDynamicUnitPrice uses dollars for standard values and yuan for recharge values', () => {

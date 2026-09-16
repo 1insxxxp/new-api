@@ -18,12 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { formatCurrencyFromUSD } from '@/lib/currency'
 
-import { QUOTA_TYPE_VALUES, TOKEN_UNIT_DIVISORS } from '../constants'
+import { TOKEN_UNIT_DIVISORS } from '../constants'
 import type { PricingModel, TokenUnit, PriceType } from '../types'
 import {
   getConfiguredGroupRatio,
   getDisplayGroupRatio,
   getDisplayModelPrice,
+  isTokenBasedModel,
 } from './model-helpers'
 
 // ----------------------------------------------------------------------------
@@ -158,7 +159,7 @@ export function formatPrice(
   usdExchangeRate = 1,
   selectedGroup?: string
 ): string {
-  if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
+  if (!isTokenBasedModel(model, selectedGroup)) {
     return '-'
   }
 
@@ -194,7 +195,7 @@ export function formatGroupPrice(
   usdExchangeRate = 1,
   groupRatio: Record<string, number>
 ): string {
-  if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
+  if (!isTokenBasedModel(model, group)) {
     return '-'
   }
 
@@ -228,7 +229,7 @@ export function formatFixedPrice(
   usdExchangeRate = 1,
   groupRatio: Record<string, number>
 ): string {
-  if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
+  if (isTokenBasedModel(model, group)) {
     return '-'
   }
 
@@ -260,7 +261,7 @@ export function formatRequestPrice(
   usdExchangeRate = 1,
   selectedGroup?: string
 ): string {
-  if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
+  if (isTokenBasedModel(model, selectedGroup)) {
     return '-'
   }
 

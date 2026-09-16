@@ -22,16 +22,18 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
-func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testing.T) {
+func setupPublicGroupSyncTest(t *testing.T) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.Option{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.Option{}, &model.Model{}, &model.Vendor{}))
 
 	originalDB, originalLogDB := model.DB, model.LOG_DB
 	originalMemoryCache := common.MemoryCacheEnabled
@@ -52,6 +54,7 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	common.OptionMap = make(map[string]string)
 	require.NoError(t, os.Setenv("PUBLIC_GROUP_SYNC_SECRET", "test-secret"))
 	t.Cleanup(func() {
+		model.InvalidatePricingCache()
 		model.DB, model.LOG_DB = originalDB, originalLogDB
 		common.MemoryCacheEnabled = originalMemoryCache
 		common.OptionMap = originalOptionMap
@@ -74,6 +77,11 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 			_ = sqlDB.Close()
 		}
 	})
+}
+
+func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testing.T) {
+	setupPublicGroupSyncTest(t)
+	db := model.DB
 
 	inputPrice := 0.000004
 	outputPrice := 0.000012
@@ -154,6 +162,58 @@ func TestReceivePublicGroupSyncSnapshotPersistsChannelsPricesAndGroups(t *testin
 	require.NotContains(t, groupModelPriceOption.Value, "sync-image-model")
 }
 
+func TestReceivePublicGroupSyncPreservesTokenAndRequestPricingAcrossGroups(t *testing.T) {
+	for _, reverse := range []bool{false, true} {
+		t.Run(fmt.Sprintf("request_first=%t", reverse), func(t *testing.T) {
+			setupPublicGroupSyncTest(t)
+			input, output, cache, requestPrice := 0.000003, 0.000009, 0.0000001, 0.15
+			tokenGroup := PublicGroupSyncRequest{
+				Version: PublicGroupSyncSnapshotVersion, GroupID: 71, GroupName: "token-group",
+				PublicEnabled: true, GroupRatio: 1, Models: []string{"shared-model"},
+				ModelPricing: map[string]PublicGroupSyncModel{"shared-model": {
+					Platform: "openai", BillingMode: "token", InputPrice: &input,
+					OutputPrice: &output, CacheReadPrice: &cache,
+				}},
+			}
+			requestGroup := PublicGroupSyncRequest{
+				Version: PublicGroupSyncSnapshotVersion, GroupID: 128, GroupName: "request-group",
+				PublicEnabled: true, GroupRatio: 1, Models: []string{"shared-model"},
+				ModelPricing: map[string]PublicGroupSyncModel{"shared-model": {
+					Platform: "openai", BillingMode: "per_request", PerRequestPrice: &requestPrice,
+				}},
+			}
+			snapshots := []PublicGroupSyncRequest{tokenGroup, requestGroup}
+			if reverse {
+				snapshots[0], snapshots[1] = snapshots[1], snapshots[0]
+			}
+			body, err := common.Marshal(publicGroupSyncEnvelope{Version: PublicGroupSyncSnapshotVersion, Snapshots: snapshots})
+			require.NoError(t, err)
+			for range 2 {
+				require.Equal(t, http.StatusOK, postPublicGroupSyncTestRequest(t, body, "test-secret"))
+				pricing := model.GetPricing()
+				require.Len(t, pricing, 1)
+				assert.Equal(t, 0, pricing[0].QuotaType)
+				assert.InDelta(t, 1.5, pricing[0].ModelRatio, 1e-10)
+				assert.InDelta(t, 3, pricing[0].CompletionRatio, 1e-10)
+				require.NotNil(t, pricing[0].CacheRatio)
+				assert.InDelta(t, 1.0/30, *pricing[0].CacheRatio, 1e-10)
+				assert.Equal(t, map[string]float64{"request-group": 0.15}, pricing[0].GroupPrices)
+				assert.ElementsMatch(t, []string{"token-group", "request-group"}, pricing[0].EnableGroup)
+			}
+
+			// Removing the token group must restore request-only pricing.
+			body, err = common.Marshal(publicGroupSyncEnvelope{Version: PublicGroupSyncSnapshotVersion, Snapshots: []PublicGroupSyncRequest{requestGroup}})
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, postPublicGroupSyncTestRequest(t, body, "test-secret"))
+			pricing := model.GetPricing()
+			require.Len(t, pricing, 1)
+			assert.Equal(t, 1, pricing[0].QuotaType)
+			assert.Equal(t, 0.15, pricing[0].ModelPrice)
+			assert.Equal(t, []string{"request-group"}, pricing[0].EnableGroup)
+		})
+	}
+}
+
 func TestSelectPublicGroupSyncChannelPrefersExistingConfiguredChannel(t *testing.T) {
 	legacyKey := "real-upstream-key"
 	mirrorKey := "sub-public-group-sync"
@@ -165,6 +225,52 @@ func TestSelectPublicGroupSyncChannelPrefersExistingConfiguredChannel(t *testing
 	require.Same(t, legacy, canonical)
 	require.Len(t, duplicates, 1)
 	require.Same(t, mirror, duplicates[0])
+}
+
+func TestPublicGroupSyncUpdatesPricingGroupOrder(t *testing.T) {
+	setupPublicGroupSyncTest(t)
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{}`))
+	for _, test := range []struct {
+		name, snapshots string
+		want            []string
+	}{
+		{"configured order and ID tie break", `[
+			{"version":1,"group_id":3,"group_name":"alpha","sort_order":20},
+			{"version":1,"group_id":8,"group_name":"beta","sort_order":10},
+			{"version":1,"group_id":2,"group_name":" zeta ","sort_order":10}]`, []string{"zeta", "beta", "alpha"}},
+		{"reorder rename and remove", `[
+			{"version":1,"group_id":3,"group_name":"alpha","sort_order":0},
+			{"version":1,"group_id":8,"group_name":"renamed","sort_order":5}]`, []string{"alpha", "renamed"}},
+		{"legacy snapshot uses ID order", `[
+			{"version":1,"group_id":8,"group_name":"alpha"},
+			{"version":1,"group_id":3,"group_name":"zeta"}]`, []string{"zeta", "alpha"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			body := []byte(`{"version":1,"snapshots":` + test.snapshots + `}`)
+			require.Equal(t, http.StatusOK, postPublicGroupSyncTestRequest(t, body, "test-secret"))
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodGet, "/api/pricing", nil)
+			GetPricing(ctx)
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var response struct {
+				GroupOrder []string `json:"group_order"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.Equal(t, test.want, response.GroupOrder)
+		})
+	}
+}
+
+func TestPricingGroupOrderOmitsUnavailableAndAppendsLocalGroups(t *testing.T) {
+	setupPublicGroupSyncTest(t)
+	require.NoError(t, model.UpdateOptionsBulk(map[string]string{
+		"PublicGroupOrder": `["private","zeta","zeta","alpha"]`,
+	}))
+	assert.Equal(t, []string{"zeta", "alpha", "local"}, getPricingGroupOrder(map[string]string{
+		"alpha": "alpha", "local": "local", "zeta": "zeta",
+	}))
+	assert.Empty(t, getPricingGroupOrder(map[string]string{}))
 }
 
 func TestReceivePublicGroupSyncImagePricingWinsAcrossGroups(t *testing.T) {

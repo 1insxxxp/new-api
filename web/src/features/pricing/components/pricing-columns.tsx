@@ -99,7 +99,11 @@ export function usePricingColumns(
       accessorKey: 'quota_type',
       header: t('Type'),
       cell: ({ row }) => (
-        <ModelBillingModeBadge model={row.original} className='-ml-1.5' />
+        <ModelBillingModeBadge
+          model={row.original}
+          selectedGroup={selectedGroup}
+          className='-ml-1.5'
+        />
       ),
       size: 110,
       enableSorting: false,
@@ -174,7 +178,7 @@ export function usePricingColumns(
           )
         }
 
-        const isTokenBased = isTokenBasedModel(model)
+        const isTokenBased = isTokenBasedModel(model, selectedGroup)
 
         if (isTokenBased) {
           const inputPrice = stripTrailingZeros(
@@ -282,7 +286,7 @@ export function usePricingColumns(
           )
         }
 
-        const isTokenBased = isTokenBasedModel(model)
+        const isTokenBased = isTokenBasedModel(model, selectedGroup)
 
         if (!isTokenBased || model.cache_ratio == null) {
           return <span className='text-muted-foreground/30 text-xs'>—</span>

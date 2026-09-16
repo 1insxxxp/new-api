@@ -24,6 +24,7 @@ import {
   ENDPOINT_TYPES,
 } from '../constants'
 import type { PricingModel } from '../types'
+import { getResolvedQuotaType } from './model-helpers'
 
 // ----------------------------------------------------------------------------
 // Filter Utilities
@@ -75,14 +76,17 @@ export function filterByGroup(
  */
 export function filterByQuotaType(
   models: PricingModel[],
-  quotaType: string
+  quotaType: string,
+  selectedGroup?: string
 ): PricingModel[] {
   if (quotaType === QUOTA_TYPES.ALL) return models
   const targetType =
     quotaType === QUOTA_TYPES.TOKEN
       ? QUOTA_TYPE_VALUES.TOKEN
       : QUOTA_TYPE_VALUES.REQUEST
-  return models.filter((m) => m.quota_type === targetType)
+  return models.filter(
+    (m) => getResolvedQuotaType(m, selectedGroup) === targetType
+  )
 }
 
 /**
@@ -149,7 +153,11 @@ export function filterAndSortModels(
   let result = filterBySearch(models, filters.search)
   result = filterByVendor(result, filters.vendor)
   result = filterByGroup(result, filters.group)
-  result = filterByQuotaType(result, filters.quotaType)
+  result = filterByQuotaType(
+    result,
+    filters.quotaType,
+    filters.group === FILTER_ALL ? undefined : filters.group
+  )
   result = filterByEndpointType(result, filters.endpointType)
   result = filterByTag(result, filters.tag)
   result = sortModels(result, filters.sortBy)
@@ -183,7 +191,7 @@ export function extractAllTags(models: PricingModel[]): string[] {
     }
   })
 
-  return Array.from(tagSet).sort((a, b) => a.localeCompare(b))
+  return [...tagSet].sort((a, b) => a.localeCompare(b))
 }
 
 /**

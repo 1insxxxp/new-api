@@ -54,7 +54,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const priceRate = props.priceRate ?? 1
   const usdExchangeRate = props.usdExchangeRate ?? 1
   const showRechargePrice = props.showRechargePrice ?? false
-  const isTokenBased = isTokenBasedModel(props.model)
+  const isTokenBased = isTokenBasedModel(props.model, props.selectedGroup)
   const fixedPriceUnit =
     props.model.billing_mode === 'image' ? t('Image') : t('request')
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
@@ -81,7 +81,12 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       })
     : null
 
-  const primaryGroup = groups[0]
+  const primaryGroup =
+    props.selectedGroup && groups.includes(props.selectedGroup)
+      ? props.selectedGroup
+      : (groups.find(
+          (group) => isTokenBasedModel(props.model, group) === isTokenBased
+        ) ?? groups[0])
   const bottomTags = [...endpoints.slice(0, 2), ...tags.slice(0, 2)]
   const hiddenCount =
     Math.max(groups.length - 1, 0) +
@@ -253,7 +258,10 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               {primaryGroup}
             </span>
           )}
-          <ModelBillingModeBadge model={props.model} />
+          <ModelBillingModeBadge
+            model={props.model}
+            selectedGroup={props.selectedGroup}
+          />
         </div>
         <ModelPerfBadge perf={props.perf} className='row-span-2 self-start' />
 
