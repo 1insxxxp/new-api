@@ -30,7 +30,12 @@ import {
   getDynamicPricingSummary,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
-import { isTokenBasedModel } from '../lib/model-helpers'
+import {
+  isTokenBasedModel,
+  getDisplayBillingMode,
+  getDisplayPricingGroup,
+  hasDisplayPrice,
+} from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
 import { ModelBillingModeBadge } from './model-billing-mode-badge'
@@ -56,7 +61,9 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const showRechargePrice = props.showRechargePrice ?? false
   const isTokenBased = isTokenBasedModel(props.model, props.selectedGroup)
   const fixedPriceUnit =
-    props.model.billing_mode === 'image' ? t('Image') : t('request')
+    getDisplayBillingMode(props.model, props.selectedGroup) === 'image'
+      ? t('Image')
+      : t('request')
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
@@ -65,9 +72,10 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const modelIcon = modelIconKey ? getLobeIcon(modelIconKey, 28) : null
   const initial = props.model.model_name?.charAt(0).toUpperCase() || '?'
   const isDynamicPricing =
-    props.model.billing_mode === 'tiered_expr' &&
+    getDisplayBillingMode(props.model, props.selectedGroup) === 'tiered_expr' &&
     Boolean(props.model.billing_expr)
-  const hasCachedPrice = isTokenBased && props.model.cache_ratio != null
+  const hasCachedPrice =
+    isTokenBased && hasDisplayPrice(props.model, 'cache', props.selectedGroup)
   const dynamicSummary = isDynamicPricing
     ? getDynamicPricingSummary(props.model, {
         tokenUnit,
@@ -82,11 +90,12 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     : null
 
   const primaryGroup =
-    props.selectedGroup && groups.includes(props.selectedGroup)
+    getDisplayPricingGroup(props.model, props.selectedGroup) ??
+    (props.selectedGroup && groups.includes(props.selectedGroup)
       ? props.selectedGroup
       : (groups.find(
           (group) => isTokenBasedModel(props.model, group) === isTokenBased
-        ) ?? groups[0])
+        ) ?? groups[0]))
   const bottomTags = [...endpoints.slice(0, 2), ...tags.slice(0, 2)]
   const hiddenCount =
     Math.max(groups.length - 1, 0) +

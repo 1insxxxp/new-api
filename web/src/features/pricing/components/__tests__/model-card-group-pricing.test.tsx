@@ -16,13 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 
 import type { PricingModel } from '../../types'
 import { ModelCard } from '../model-card'
+import { ModelDetailsContent } from '../model-details'
+import { PricingTable } from '../pricing-table'
 
 vi.mock('@/lib/lobe-icon', () => ({ getLobeIcon: () => null }))
+vi.mock('@visactor/react-vchart', () => ({ VChart: () => null }))
+vi.mock('@/features/performance-metrics/api', () => ({
+  getPerfMetrics: async () => ({ success: true, data: { groups: [] } }),
+}))
 
 const model: PricingModel = {
   id: 1,
@@ -36,6 +43,162 @@ const model: PricingModel = {
 }
 
 describe('model card group pricing', () => {
+  test('the all-groups card chooses the cheaper ordinary dynamic tier over an inherited quote', () => {
+    const mixed: PricingModel = {
+      ...model,
+      billing_mode: 'tiered_expr',
+      billing_expr: 'tier("base", p * 3 + c * 9)',
+      model_ratio: 7,
+      group_prices: {},
+      group_ratio: { 'token-group': 2, 'request-group': 1 },
+      group_pricing: {
+        'request-group': {
+          billing_mode: 'token',
+          input_price: 0.000008,
+          output_price: 0.000024,
+        },
+      },
+    }
+    render(<ModelCard model={mixed} onClick={vi.fn()} />)
+    expect(screen.getByText('token-group')).toBeInTheDocument()
+    expect(screen.queryByText('request-group')).not.toBeInTheDocument()
+    expect(screen.getByText('$6')).toBeInTheDocument()
+  })
+
+  test('group comparison retains ordinary dynamic tiers alongside inherited quotes', () => {
+    const mixed: PricingModel = {
+      ...model,
+      billing_mode: 'tiered_expr',
+      billing_expr: 'tier("base", p * 3 + c * 9)',
+      model_ratio: 7,
+      group_prices: {},
+      group_ratio: { 'token-group': 2, 'request-group': 1 },
+      group_pricing: {
+        'request-group': {
+          billing_mode: 'token',
+          input_price: 0.000004,
+          output_price: 0.000012,
+        },
+      },
+    }
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const details = render(
+      <QueryClientProvider client={client}>
+        <ModelDetailsContent
+          model={mixed}
+          selectedGroup='token-group'
+          groupRatio={{ 'token-group': 2, 'request-group': 99 }}
+          usableGroup={{
+            'token-group': { desc: '', ratio: 2 },
+            'request-group': { desc: '', ratio: 1 },
+          }}
+          endpointMap={{}}
+          autoGroups={[]}
+          priceRate={1}
+          usdExchangeRate={1}
+          tokenUnit='M'
+        />
+      </QueryClientProvider>
+    )
+    const section = screen.getByText('Pricing by Group').closest('section')
+    expect(section).not.toBeNull()
+    if (!section) throw new Error('missing group comparison')
+    const comparison = within(section)
+    const tier = comparison.getByText('base').closest('tr')
+    expect(tier).toHaveTextContent('$6')
+    expect(tier).toHaveTextContent('$18')
+    const inherited = comparison.getByText('request-group').closest('tr')
+    expect(inherited).toHaveTextContent('$4')
+    expect(inherited).toHaveTextContent('$12')
+    expect(inherited).toHaveTextContent('1x')
+    expect(comparison.queryByText('$28')).not.toBeInTheDocument()
+    details.unmount()
+    client.clear()
+  })
+
+  test('table and details compare inherited prices independently from ordinary prices', () => {
+    const inherited: PricingModel = {
+      ...model,
+      model_ratio: 7,
+      completion_ratio: 3,
+      group_ratio: { 'token-group': 2, 'request-group': 1 },
+      group_prices: {},
+      group_pricing: {
+        'request-group': {
+          billing_mode: 'token',
+          input_price: 0.000006,
+          output_price: 0.000018,
+          image_input_price: 0,
+          image_output_price: 0.000009,
+        },
+      },
+    }
+    const table = render(
+      <PricingTable models={[inherited]} selectedGroup='request-group' />
+    )
+    expect(screen.getByRole('table')).toHaveTextContent('$6')
+    expect(screen.getByRole('table')).toHaveTextContent('$18')
+    table.unmount()
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const details = render(
+      <QueryClientProvider client={client}>
+        <ModelDetailsContent
+          model={inherited}
+          selectedGroup='request-group'
+          groupRatio={{ 'token-group': 2, 'request-group': 99 }}
+          usableGroup={{
+            'token-group': { desc: '', ratio: 2 },
+            'request-group': { desc: '', ratio: 1 },
+          }}
+          endpointMap={{}}
+          autoGroups={[]}
+          priceRate={1}
+          usdExchangeRate={1}
+          tokenUnit='M'
+        />
+      </QueryClientProvider>
+    )
+    const rows = screen.getAllByRole('row')
+    const category = rows.find((row) =>
+      row.textContent?.includes('request-group')
+    )
+    const ordinary = rows.find((row) =>
+      row.textContent?.includes('token-group')
+    )
+    expect(category).toHaveTextContent('$6')
+    expect(category).toHaveTextContent('$18')
+    expect(category).toHaveTextContent('$0')
+    expect(category).toHaveTextContent('$9')
+    expect(category).toHaveTextContent('1x')
+    expect(ordinary).toHaveTextContent('$28')
+    expect(ordinary).toHaveTextContent('$84')
+    details.unmount()
+    client.clear()
+  })
+  test('an inherited image group overrides the badge without a duplicate model identity', () => {
+    const inherited = {
+      ...model,
+      group_pricing: {
+        'request-group': { billing_mode: 'image', per_request_price: 0.4 },
+      },
+    }
+    render(
+      <ModelCard
+        model={inherited}
+        selectedGroup='request-group'
+        onClick={vi.fn()}
+      />
+    )
+    expect(screen.getByText('shared-model')).toBeInTheDocument()
+    expect(screen.getByText('Image')).toBeInTheDocument()
+    expect(screen.getByText('/ Image')).toBeInTheDocument()
+    expect(screen.queryByText('Token-based')).not.toBeInTheDocument()
+  })
   test('switching groups updates the group label and billing mode together', () => {
     const { rerender } = render(
       <ModelCard model={model} selectedGroup='token-group' onClick={vi.fn()} />

@@ -57,7 +57,7 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 		return
 	}
 	var envelope publicGroupSyncEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil || envelope.Version != PublicGroupSyncSnapshotVersion {
+	if err := json.Unmarshal(body, &envelope); err != nil || (envelope.Version != 1 && envelope.Version != PublicGroupSyncSnapshotVersion) {
 		c.JSON(400, gin.H{"error": "invalid snapshot"})
 		return
 	}
@@ -96,8 +96,35 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			}
 		}
 	}
+	// Only ordinary snapshots own global billing keys. Channel.Models also
+	// contains display-only inherited models, so it cannot be used for cleanup
+	// after this receiver has persisted its first explicit ownership inventory.
+	common.OptionMapRWMutex.RLock()
+	previousBillingModels, hasBillingInventory := common.OptionMap[publicGroupBillingModelsOption]
+	common.OptionMapRWMutex.RUnlock()
+	if hasBillingInventory {
+		var names []string
+		if err := common.UnmarshalJsonStr(previousBillingModels, &names); err != nil {
+			c.JSON(500, gin.H{"error": "invalid previous billing inventory"})
+			return
+		}
+		oldSyncedModels = make(map[string]struct{}, len(names))
+		for _, name := range names {
+			oldSyncedModels[name] = struct{}{}
+		}
+	}
 	newSyncedModels := make(map[string]struct{})
 	newSyncedPricedModels := make(map[string]struct{})
+	// An inherited entry never authorizes deleting an existing billing key,
+	// including when its ordinary source disappeared from this snapshot.
+	// Drop old ownership so later removal of the display entry is also harmless.
+	for _, snapshot := range envelope.Snapshots {
+		for name, pricing := range snapshot.ModelPricing {
+			if pricing.hasSourcePricing() {
+				delete(oldSyncedModels, name)
+			}
+		}
+	}
 	// A model can be exposed by more than one public group. Image pricing has
 	// precedence over token/request pricing so a later ordinary group cannot
 	// downgrade an image model back to the default billing mode.
@@ -105,6 +132,9 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	tokenModels := make(map[string]struct{})
 	for _, snapshot := range envelope.Snapshots {
 		for name, pricing := range snapshot.ModelPricing {
+			if pricing.hasSourcePricing() {
+				continue
+			}
 			mode := strings.ToLower(strings.TrimSpace(pricing.BillingMode))
 			if mode == billing_setting.BillingModeImage {
 				imageModels[name] = struct{}{}
@@ -123,9 +153,10 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	billingModes := billing_setting.GetBillingModeCopy()
 	usableGroups := setting.GetUserUsableGroupsCopy()
 	groupModelPrices := make(map[string]map[string]float64)
+	displayPricing := make(map[string]map[string]model.PublicGroupDisplayPrice)
 	newSyncedGroups := make(map[string]struct{})
 	for _, snapshot := range envelope.Snapshots {
-		if snapshot.GroupID == 0 || snapshot.Version != PublicGroupSyncSnapshotVersion {
+		if snapshot.GroupID == 0 || snapshot.Version != envelope.Version {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group_id"})
 			return
 		}
@@ -139,12 +170,26 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid billing mode for " + name})
 				return
 			}
+			if pricing.hasSourcePricing() {
+				quote, err := pricing.displayPrice()
+				if err != nil || envelope.Version != PublicGroupSyncSnapshotVersion || snapshot.GroupRatio != 1 || !common.StringsContains(snapshot.Models, name) {
+					c.JSON(400, gin.H{"error": "invalid source pricing for " + name})
+					return
+				}
+				if snapshot.PublicEnabled {
+					group := strings.TrimSpace(snapshot.GroupName)
+					if displayPricing[group] == nil {
+						displayPricing[group] = make(map[string]model.PublicGroupDisplayPrice)
+					}
+					displayPricing[group][name] = quote
+				}
+			}
 		}
 	}
 	for _, snapshot := range envelope.Snapshots {
 		for _, name := range snapshot.Models {
 			if strings.TrimSpace(name) != "" {
-				if _, priced := snapshot.ModelPricing[name]; !priced {
+				if pricing, priced := snapshot.ModelPricing[name]; !priced || pricing.hasSourcePricing() {
 					continue
 				}
 				newSyncedPricedModels[name] = struct{}{}
@@ -157,6 +202,9 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 		groupRatios[groupName] = snapshot.GroupRatio
 		usableGroups[groupName] = groupName
 		for name, pricing := range snapshot.ModelPricing {
+			if pricing.hasSourcePricing() {
+				continue
+			}
 			mode := strings.ToLower(strings.TrimSpace(pricing.BillingMode))
 			if (mode == billing_setting.BillingModeImage || mode == "per_request") && pricing.PerRequestPrice != nil {
 				if groupModelPrices[groupName] == nil {
@@ -166,7 +214,7 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			}
 		}
 		for _, name := range snapshot.Models {
-			if strings.TrimSpace(name) != "" {
+			if strings.TrimSpace(name) != "" && !snapshot.ModelPricing[name].hasSourcePricing() {
 				newSyncedModels[name] = struct{}{}
 			}
 		}
@@ -200,6 +248,9 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 			return
 		}
 		for name, pricing := range snapshot.ModelPricing {
+			if pricing.hasSourcePricing() {
+				continue
+			}
 			mode := strings.ToLower(strings.TrimSpace(pricing.BillingMode))
 			if mode == "" {
 				mode = "token"
@@ -333,16 +384,23 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	for _, snapshot := range orderedSnapshots {
 		groupOrder = append(groupOrder, strings.TrimSpace(snapshot.GroupName))
 	}
+	billingModels := make([]string, 0, len(newSyncedModels))
+	for name := range newSyncedModels {
+		billingModels = append(billingModels, name)
+	}
+	sort.Strings(billingModels)
 	for key, value := range map[string]any{
-		"PublicGroupOrder": groupOrder,
-		"ModelPrice":       prices,
-		"ModelRatio":       ratios,
-		"CompletionRatio":  completionRatios,
-		"CacheRatio":       cacheRatios,
-		"CreateCacheRatio": createCacheRatios,
-		"GroupRatio":       groupRatios,
-		"UserUsableGroups": usableGroups,
-		"GroupModelPrice":  groupModelPrices,
+		publicGroupDisplayPricingOption: displayPricing,
+		publicGroupBillingModelsOption:  billingModels,
+		"PublicGroupOrder":              groupOrder,
+		"ModelPrice":                    prices,
+		"ModelRatio":                    ratios,
+		"CompletionRatio":               completionRatios,
+		"CacheRatio":                    cacheRatios,
+		"CreateCacheRatio":              createCacheRatios,
+		"GroupRatio":                    groupRatios,
+		"UserUsableGroups":              usableGroups,
+		"GroupModelPrice":               groupModelPrices,
 	} {
 		b, marshalErr := json.Marshal(value)
 		if marshalErr != nil {

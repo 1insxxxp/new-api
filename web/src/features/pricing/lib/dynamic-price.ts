@@ -22,14 +22,22 @@ import { TOKEN_UNIT_DIVISORS } from '../constants'
 import type { PricingModel, TokenUnit } from '../types'
 import {
   BILLING_PRICING_VARS,
-  parseTiersFromExpr,
   splitBillingExprAndRequestRules,
   tryParseRequestRuleExpr,
   type BillingVar,
   type ParsedTier,
 } from './billing-expr'
+import {
+  getDynamicPricingTiers,
+  isDynamicPricingModel,
+} from './dynamic-price-tiers'
 import { getDisplayGroupRatio } from './model-helpers'
 import { getPricingModeSymbol } from './price'
+
+export {
+  getDynamicPricingTiers,
+  isDynamicPricingModel,
+} from './dynamic-price-tiers'
 
 type DynamicPriceOptions = {
   tokenUnit: TokenUnit
@@ -62,10 +70,6 @@ export type DynamicPricingSummary = {
 }
 
 const PRIMARY_DYNAMIC_FIELDS = new Set(['inputPrice', 'outputPrice'])
-
-export function isDynamicPricingModel(model: PricingModel): boolean {
-  return model.billing_mode === 'tiered_expr' && Boolean(model.billing_expr)
-}
 
 export function getDynamicDisplayGroupRatio(
   model: PricingModel,
@@ -107,14 +111,6 @@ export function formatDynamicUnitPrice(
     abbreviate: false,
     symbolOverride: getPricingModeSymbol(options.showRechargePrice ?? false),
   })
-}
-
-export function getDynamicPricingTiers(model: PricingModel): ParsedTier[] {
-  if (!isDynamicPricingModel(model)) return []
-  const { billingExpr } = splitBillingExprAndRequestRules(
-    model.billing_expr || ''
-  )
-  return parseTiersFromExpr(billingExpr)
 }
 
 export function hasDynamicRequestRules(model: PricingModel): boolean {

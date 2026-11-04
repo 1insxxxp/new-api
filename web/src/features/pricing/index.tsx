@@ -283,6 +283,7 @@ export function Pricing() {
                 if (!open) setSelectedModelName(null)
               }}
               model={selectedModel}
+              selectedGroup={groupFilter}
               groupRatio={groupRatio || {}}
               usableGroup={usableGroup || {}}
               endpointMap={

@@ -58,7 +58,19 @@ func GetPricing(c *gin.Context) {
 	}
 
 	usableGroup = service.GetUserUsableGroups(group)
+	var err error
+	pricing, err = projectPublicGroupPricing(pricing, usableGroup)
+	if err != nil {
+		c.JSON(500, gin.H{"success": false, "message": "pricing display unavailable"})
+		return
+	}
 	pricing = filterPricingByUsableGroups(pricing, usableGroup)
+	for _, row := range pricing {
+		for entry := range row.GroupPricing {
+			// Source rates are already included in these display-only quotes.
+			groupRatio[entry] = 1
+		}
+	}
 	// check groupRatio contains usableGroup
 	for group := range ratio_setting.GetGroupRatioCopy() {
 		if _, ok := usableGroup[group]; !ok {
@@ -66,6 +78,12 @@ func GetPricing(c *gin.Context) {
 		}
 	}
 
+	autoGroups := make([]string, 0)
+	for _, candidate := range service.GetUserAutoGroup(group) {
+		if _, ok := usableGroup[candidate]; ok {
+			autoGroups = append(autoGroups, candidate)
+		}
+	}
 	c.JSON(200, gin.H{
 		"success":            true,
 		"data":               pricing,
@@ -74,7 +92,7 @@ func GetPricing(c *gin.Context) {
 		"usable_group":       usableGroup,
 		"group_order":        getPricingGroupOrder(usableGroup),
 		"supported_endpoint": model.GetSupportedEndpointMap(),
-		"auto_groups":        service.GetUserAutoGroup(group),
+		"auto_groups":        autoGroups,
 		"pricing_version":    "a42d372ccf0b5dd13ecf71203521f9d2",
 	})
 }

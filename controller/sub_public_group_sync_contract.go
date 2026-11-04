@@ -1,7 +1,7 @@
 package controller
 
 // PublicGroupSyncSnapshotVersion is the wire version for public group snapshots.
-const PublicGroupSyncSnapshotVersion = 1
+const PublicGroupSyncSnapshotVersion = 2
 
 // PublicGroupSyncRequest carries a public group's configuration between services.
 type PublicGroupSyncRequest struct {
@@ -25,6 +25,9 @@ type PublicGroupSyncModel struct {
 	Platform         string   `json:"platform"`
 	DisplayName      string   `json:"display_name"`
 	UpstreamModel    string   `json:"upstream_model"`
+	SourceGroupID    int64    `json:"source_group_id,omitempty"`
+	SourceModel      string   `json:"source_model,omitempty"`
+	SourceGroupRatio *float64 `json:"source_group_ratio,omitempty"`
 	BillingMode      string   `json:"billing_mode"`
 	InputPrice       *float64 `json:"input_price,omitempty"`
 	OutputPrice      *float64 `json:"output_price,omitempty"`

@@ -24,7 +24,13 @@ import {
   ENDPOINT_TYPES,
 } from '../constants'
 import type { PricingModel } from '../types'
-import { getResolvedQuotaType } from './model-helpers'
+import {
+  getResolvedQuotaType,
+  getInheritedDisplayPrice,
+  getDisplayGroupRatio,
+  getDisplayModelPrice,
+  getOrdinaryInputPricePerMillion,
+} from './model-helpers'
 
 // ----------------------------------------------------------------------------
 // Filter Utilities
@@ -105,8 +111,18 @@ export function filterByEndpointType(
 /**
  * Get model price for sorting
  */
-function getModelPrice(model: PricingModel): number {
-  return model.quota_type === 0 ? model.model_ratio : model.model_price || 0
+function getModelPrice(model: PricingModel, selectedGroup?: string): number {
+  const quote = getInheritedDisplayPrice(model, selectedGroup)
+  if (quote) {
+    return quote.billing_mode === 'token'
+      ? (quote.input_price ?? Number.POSITIVE_INFINITY) * 1e6
+      : (quote.per_request_price ?? Number.POSITIVE_INFINITY)
+  }
+  const ratio = getDisplayGroupRatio(model, selectedGroup)
+  return getResolvedQuotaType(model, selectedGroup) === 0 ||
+    model.billing_mode === 'tiered_expr'
+    ? getOrdinaryInputPricePerMillion(model) * ratio
+    : getDisplayModelPrice(model, selectedGroup) * ratio
 }
 
 /**
@@ -114,7 +130,8 @@ function getModelPrice(model: PricingModel): number {
  */
 export function sortModels(
   models: PricingModel[],
-  sortBy: string
+  sortBy: string,
+  selectedGroup?: string
 ): PricingModel[] {
   const sorted = [...models]
 
@@ -125,10 +142,16 @@ export function sortModels(
       )
       break
     case SORT_OPTIONS.PRICE_LOW:
-      sorted.sort((a, b) => getModelPrice(a) - getModelPrice(b))
-      break
     case SORT_OPTIONS.PRICE_HIGH:
-      sorted.sort((a, b) => getModelPrice(b) - getModelPrice(a))
+      sorted.sort((a, b) => {
+        const aPrice = getModelPrice(a, selectedGroup)
+        const bPrice = getModelPrice(b, selectedGroup)
+        if (!Number.isFinite(aPrice)) return Number.isFinite(bPrice) ? 1 : 0
+        if (!Number.isFinite(bPrice)) return -1
+        return sortBy === SORT_OPTIONS.PRICE_LOW
+          ? aPrice - bPrice
+          : bPrice - aPrice
+      })
       break
   }
 
@@ -160,7 +183,7 @@ export function filterAndSortModels(
   )
   result = filterByEndpointType(result, filters.endpointType)
   result = filterByTag(result, filters.tag)
-  result = sortModels(result, filters.sortBy)
+  result = sortModels(result, filters.sortBy, filters.group)
 
   return result
 }

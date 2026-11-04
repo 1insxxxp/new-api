@@ -34,7 +34,12 @@ import {
   getDynamicPricingSummary,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
-import { isTokenBasedModel } from '../lib/model-helpers'
+import {
+  isTokenBasedModel,
+  getDisplayBillingMode,
+  hasDisplayPrice,
+  getInheritedDisplayPrice,
+} from '../lib/model-helpers'
 import {
   formatPrice,
   formatRequestPrice,
@@ -118,16 +123,18 @@ export function usePricingColumns(
       ),
       cell: ({ row }) => {
         const model = row.original
-        const dynamicSummary = getDynamicPricingSummary(model, {
-          tokenUnit,
-          showRechargePrice,
-          priceRate,
-          usdExchangeRate,
-          groupRatioMultiplier: getDynamicDisplayGroupRatio(
-            model,
-            selectedGroup
-          ),
-        })
+        const dynamicSummary = getInheritedDisplayPrice(model, selectedGroup)
+          ? null
+          : getDynamicPricingSummary(model, {
+              tokenUnit,
+              showRechargePrice,
+              priceRate,
+              usdExchangeRate,
+              groupRatioMultiplier: getDynamicDisplayGroupRatio(
+                model,
+                selectedGroup
+              ),
+            })
 
         if (dynamicSummary) {
           if (dynamicSummary.isSpecialExpression) {
@@ -232,7 +239,10 @@ export function usePricingColumns(
           <div className='max-w-full min-w-0'>
             <span className='font-mono text-sm tabular-nums'>{price}</span>
             <div className='text-muted-foreground/50 text-[10px]'>
-              / {model.billing_mode === 'image' ? t('Image') : t('request')}
+              /{' '}
+              {getDisplayBillingMode(model, selectedGroup) === 'image'
+                ? t('Image')
+                : t('request')}
             </div>
           </div>
         )
@@ -247,16 +257,18 @@ export function usePricingColumns(
       header: t('Cached'),
       cell: ({ row }) => {
         const model = row.original
-        const dynamicSummary = getDynamicPricingSummary(model, {
-          tokenUnit,
-          showRechargePrice,
-          priceRate,
-          usdExchangeRate,
-          groupRatioMultiplier: getDynamicDisplayGroupRatio(
-            model,
-            selectedGroup
-          ),
-        })
+        const dynamicSummary = getInheritedDisplayPrice(model, selectedGroup)
+          ? null
+          : getDynamicPricingSummary(model, {
+              tokenUnit,
+              showRechargePrice,
+              priceRate,
+              usdExchangeRate,
+              groupRatioMultiplier: getDynamicDisplayGroupRatio(
+                model,
+                selectedGroup
+              ),
+            })
 
         if (dynamicSummary) {
           if (dynamicSummary.isSpecialExpression) {
@@ -288,7 +300,7 @@ export function usePricingColumns(
 
         const isTokenBased = isTokenBasedModel(model, selectedGroup)
 
-        if (!isTokenBased || model.cache_ratio == null) {
+        if (!isTokenBased || !hasDisplayPrice(model, 'cache', selectedGroup)) {
           return <span className='text-muted-foreground/30 text-xs'>—</span>
         }
 

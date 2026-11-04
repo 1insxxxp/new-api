@@ -25,6 +25,7 @@ import {
   getDisplayGroupRatio,
   getDisplayModelPrice,
   isTokenBasedModel,
+  getInheritedDisplayPrice,
 } from './model-helpers'
 
 // ----------------------------------------------------------------------------
@@ -68,8 +69,34 @@ export function stripTrailingZeros(formatted: string): string {
 function calculateTokenPrice(
   model: PricingModel,
   type: PriceType,
-  ratio: number
+  ratio: number,
+  selectedGroup?: string
 ): number {
+  const quote = getInheritedDisplayPrice(model, selectedGroup)
+  if (quote) {
+    let value: number | undefined
+    switch (type) {
+      case 'input':
+        value = quote.input_price
+        break
+      case 'output':
+        value = quote.output_price
+        break
+      case 'cache':
+        value = quote.cache_read_price
+        break
+      case 'create_cache':
+        value = quote.cache_write_price
+        break
+      case 'image':
+        value = quote.image_input_price
+        break
+      case 'image_output':
+        value = quote.image_output_price
+        break
+    }
+    return value == null ? Number.NaN : value * 1e6
+  }
   const base = model.model_ratio * 2 * ratio
 
   switch (type) {
@@ -89,6 +116,8 @@ function calculateTokenPrice(
       return hasRatio(model.image_ratio)
         ? base * Number(model.image_ratio)
         : Number.NaN
+    case 'image_output':
+      return Number.NaN
     case 'audio_input':
       return hasRatio(model.audio_ratio)
         ? base * Number(model.audio_ratio)
@@ -165,7 +194,13 @@ export function formatPrice(
 
   const displayGroupRatio = getDisplayGroupRatio(model, selectedGroup)
 
-  let priceInUSD = calculateTokenPrice(model, type, displayGroupRatio)
+  let priceInUSD = calculateTokenPrice(
+    model,
+    type,
+    displayGroupRatio,
+    selectedGroup
+  )
+  if (!Number.isFinite(priceInUSD)) return '-'
   priceInUSD = applyRechargeRate(
     priceInUSD,
     showWithRecharge,
@@ -200,7 +235,8 @@ export function formatGroupPrice(
   }
 
   const ratio = getConfiguredGroupRatio(groupRatio, group)
-  let priceInUSD = calculateTokenPrice(model, type, ratio)
+  let priceInUSD = calculateTokenPrice(model, type, ratio, group)
+  if (!Number.isFinite(priceInUSD)) return '-'
 
   priceInUSD = applyRechargeRate(
     priceInUSD,
@@ -233,8 +269,11 @@ export function formatFixedPrice(
     return '-'
   }
 
-  const ratio = getConfiguredGroupRatio(groupRatio, group)
+  const ratio = getInheritedDisplayPrice(model, group)
+    ? 1
+    : getConfiguredGroupRatio(groupRatio, group)
   let priceInUSD = getDisplayModelPrice(model, group) * ratio
+  if (!Number.isFinite(priceInUSD)) return '-'
 
   priceInUSD = applyRechargeRate(
     priceInUSD,
@@ -269,6 +308,7 @@ export function formatRequestPrice(
 
   let priceInUSD =
     getDisplayModelPrice(model, selectedGroup) * displayGroupRatio
+  if (!Number.isFinite(priceInUSD)) return '-'
 
   priceInUSD = applyRechargeRate(
     priceInUSD,

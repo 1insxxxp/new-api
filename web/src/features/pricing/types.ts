@@ -42,6 +42,8 @@ export type PricingModel = {
   model_price?: number
   /** Fixed price overrides keyed by the selected group name. */
   group_prices?: Record<string, number>
+  /** Effective source quotes for display only; never multiplied by group_ratio. */
+  group_pricing?: Record<string, PublicGroupDisplayPrice>
   cache_ratio?: number | null
   create_cache_ratio?: number | null
   image_ratio?: number | null
@@ -70,6 +72,17 @@ export type PricingModel = {
   input_modalities?: Modality[]
   output_modalities?: Modality[]
   capabilities?: ModelCapability[]
+}
+
+export type PublicGroupDisplayPrice = {
+  billing_mode: string
+  input_price?: number
+  output_price?: number
+  image_input_price?: number
+  image_output_price?: number
+  per_request_price?: number
+  cache_read_price?: number
+  cache_write_price?: number
 }
 
 /** Input/output modalities supported by a model. */
@@ -109,6 +122,7 @@ export type PriceType =
   | 'cache'
   | 'create_cache'
   | 'image'
+  | 'image_output'
   | 'audio_input'
   | 'audio_output'
 export type QuotaType = 0 | 1 // 0: token-based, 1: per-request
