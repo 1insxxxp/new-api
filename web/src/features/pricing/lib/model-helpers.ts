@@ -44,7 +44,9 @@ export function getDisplayPricingGroup(
   }
   const normal = groups.find((group) => !model.group_pricing?.[group])
   const firstQuote = model.group_pricing[groups[0]]
-  let targetType = model.quota_type
+  const isDynamic = model.billing_mode === 'tiered_expr'
+  const ordinaryType = isDynamic ? QUOTA_TYPE_VALUES.TOKEN : model.quota_type
+  let targetType = ordinaryType
   if (!normal && firstQuote) {
     targetType = firstQuote.billing_mode === 'token' ? 0 : 1
   }
@@ -52,7 +54,7 @@ export function getDisplayPricingGroup(
   let bestPrice = Number.POSITIVE_INFINITY
   for (const group of groups) {
     const quote = model.group_pricing[group]
-    let type = model.quota_type
+    let type = ordinaryType
     let price: number
     if (quote) {
       type = quote.billing_mode === 'token' ? 0 : 1
@@ -61,10 +63,12 @@ export function getDisplayPricingGroup(
           ? (quote.input_price ?? Number.NaN) * 1e6
           : (quote.per_request_price ?? Number.NaN)
     } else {
-      if (Object.hasOwn(model.group_prices ?? {}, group)) type = 1
+      if (!isDynamic && Object.hasOwn(model.group_prices ?? {}, group)) {
+        type = QUOTA_TYPE_VALUES.REQUEST
+      }
       const ratio = getConfiguredGroupRatio(model.group_ratio ?? {}, group)
       price =
-        type === 0 || model.billing_mode === 'tiered_expr'
+        type === QUOTA_TYPE_VALUES.TOKEN
           ? getOrdinaryInputPricePerMillion(model) * ratio
           : (model.group_prices?.[group] ?? model.model_price ?? 0) * ratio
     }
@@ -258,6 +262,9 @@ export function getResolvedQuotaType(
     return inherited.billing_mode === 'token'
       ? QUOTA_TYPE_VALUES.TOKEN
       : QUOTA_TYPE_VALUES.REQUEST
+  }
+  if (model.billing_mode === 'tiered_expr') {
+    return QUOTA_TYPE_VALUES.TOKEN
   }
   if (!selectedGroup || selectedGroup === FILTER_ALL) {
     return model.quota_type

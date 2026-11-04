@@ -24,8 +24,12 @@ import {
 } from '@/stores/system-config-store'
 
 import type { PricingModel } from '../../types'
-import { filterAndSortModels, sortModels } from '../filters'
-import { getDisplayPricingGroup, isTokenBasedModel } from '../model-helpers'
+import { filterAndSortModels, filterByQuotaType, sortModels } from '../filters'
+import {
+  getDisplayPricingGroup,
+  getResolvedQuotaType,
+  isTokenBasedModel,
+} from '../model-helpers'
 import {
   formatFixedPrice,
   formatGroupPrice,
@@ -92,6 +96,41 @@ afterEach(() => {
 })
 
 describe('inherited group display pricing', () => {
+  test.each([
+    { inputPrice: 0.000004, expectedGroup: 'category' },
+    { inputPrice: 0.000008, expectedGroup: 'normal' },
+  ])(
+    'compares only token prices for dynamic models with request-price fallbacks: %j',
+    ({ inputPrice, expectedGroup }) => {
+      const fallback: PricingModel = {
+        ...dynamicModel,
+        quota_type: 1,
+        group_prices: { normal: 0.01 },
+        enable_groups: ['normal', 'category', 'fixed'],
+        group_pricing: {
+          category: { billing_mode: 'token', input_price: inputPrice },
+          fixed: { billing_mode: 'per_request', per_request_price: 0.001 },
+        },
+      }
+      expect(getDisplayPricingGroup(fallback)).toBe(expectedGroup)
+      expect(getResolvedQuotaType(fallback, 'normal')).toBe(0)
+      expect(getResolvedQuotaType(fallback, 'fixed')).toBe(1)
+    }
+  )
+
+  test('keeps ordinary dynamic models in the token filter despite quota_type and group_prices fallbacks', () => {
+    const fallback: PricingModel = {
+      ...dynamicModel,
+      quota_type: 1,
+      group_prices: { normal: 0.01 },
+      group_pricing: undefined,
+      enable_groups: ['normal'],
+    }
+    expect(getResolvedQuotaType(fallback)).toBe(0)
+    expect(filterByQuotaType([fallback], 'token', 'normal')).toEqual([fallback])
+    expect(filterByQuotaType([fallback], 'request', 'normal')).toEqual([])
+  })
+
   test('selects the ordinary group when its dynamic first tier costs less than the inherited quote', () => {
     expect(getDisplayPricingGroup(dynamicModel)).toBe('normal')
     expect(getDisplayPricingGroup(dynamicModel, 'category')).toBe('category')
