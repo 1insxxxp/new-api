@@ -190,7 +190,9 @@ func TestPublicGroupPricingHidesOnlySelectedChannelAssociations(t *testing.T) {
 	assert.Equal(t, []string{"shared-group"}, response.Order)
 	// Public model cache and relay abilities still contain the original route.
 	assert.Len(t, model.GetPricing(), 4)
-	assert.Contains(t, model.GetGroupEnabledModels("legacy"), "legacy-only")
+	var retainedAbility model.Ability
+	require.NoError(t, model.DB.Where(&model.Ability{Group: "legacy", Model: "legacy-only", ChannelId: 30}).First(&retainedAbility).Error)
+	assert.True(t, retainedAbility.Enabled)
 	assert.Contains(t, setting.GetUserUsableGroupsCopy(), "legacy")
 	assert.Equal(t, 2.0, ratio_setting.GetGroupRatio("legacy"))
 	var channel model.Channel

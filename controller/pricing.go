@@ -65,12 +65,6 @@ func GetPricing(c *gin.Context) {
 		return
 	}
 	pricing = filterPricingByUsableGroups(pricing, usableGroup)
-	for _, row := range pricing {
-		for entry := range row.GroupPricing {
-			// Source rates are already included in these display-only quotes.
-			groupRatio[entry] = 1
-		}
-	}
 	// check groupRatio contains usableGroup
 	for group := range ratio_setting.GetGroupRatioCopy() {
 		if _, ok := usableGroup[group]; !ok {

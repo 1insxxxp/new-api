@@ -155,6 +155,7 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 	groupModelPrices := make(map[string]map[string]float64)
 	displayPricing := make(map[string]map[string]model.PublicGroupDisplayPrice)
 	newSyncedGroups := make(map[string]struct{})
+	// Validate every snapshot and quote before any channel or option writes.
 	for _, snapshot := range envelope.Snapshots {
 		if snapshot.GroupID == 0 || snapshot.Version != envelope.Version {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group_id"})
@@ -183,6 +184,32 @@ func ReceivePublicGroupSyncSnapshot(c *gin.Context) {
 					}
 					displayPricing[group][name] = quote
 				}
+			}
+		}
+		for name, pricing := range snapshot.DisplayPricing {
+			mode := strings.ToLower(strings.TrimSpace(pricing.BillingMode))
+			if mode != "token" && mode != "per_request" && mode != "image" && mode != "video" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid display billing mode for " + name})
+				return
+			}
+			if envelope.Version != PublicGroupSyncSnapshotVersion || !common.StringsContains(snapshot.Models, name) ||
+				pricing.SourceGroupID != snapshot.GroupID || pricing.SourceModel != name || snapshot.ModelPricing[name].hasSourcePricing() {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid display source pricing for " + name})
+				return
+			}
+			// Explicit ordinary quotes may use a source rate different from the
+			// snapshot's billing group ratio (for example independent image rates).
+			quote, err := pricing.displayPrice()
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid display source pricing for " + name})
+				return
+			}
+			if snapshot.PublicEnabled {
+				group := strings.TrimSpace(snapshot.GroupName)
+				if displayPricing[group] == nil {
+					displayPricing[group] = make(map[string]model.PublicGroupDisplayPrice)
+				}
+				displayPricing[group][name] = quote
 			}
 		}
 	}

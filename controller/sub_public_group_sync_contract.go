@@ -17,6 +17,9 @@ type PublicGroupSyncRequest struct {
 	Models        []string                        `json:"models"`
 	ModelMapping  map[string]string               `json:"model_mapping"`
 	ModelPricing  map[string]PublicGroupSyncModel `json:"model_pricing"`
+	// DisplayPricing contains raw source quotes only; ModelPricing retains its
+	// existing billing/routing semantics independently of this optional map.
+	DisplayPricing map[string]PublicGroupSyncModel `json:"display_pricing,omitempty"`
 }
 
 // PublicGroupSyncModel contains the public display name, upstream mapping and
