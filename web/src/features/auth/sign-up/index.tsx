@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { useStatus } from '@/hooks/use-status'
@@ -38,12 +37,12 @@ export function SignUp() {
           </h2>
           <p className='text-muted-foreground text-left text-sm sm:text-base'>
             {t('Already have an account?')}{' '}
-            <Link
-              to='/sign-in'
+            <a
+              href='https://api.passionapi.com'
               className='hover:text-primary font-medium underline underline-offset-4'
             >
               {t('Sign in')}
-            </Link>
+            </a>
             .
           </p>
         </div>
