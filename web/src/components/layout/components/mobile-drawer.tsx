@@ -32,6 +32,8 @@ import type { AuthUser } from '@/stores/auth-store'
 import { MOBILE_DRAWER_ANIMATION, MOBILE_DRAWER_CONFIG } from '../constants'
 import type { TopNavLink } from '../types'
 
+const LOGIN_URL = 'https://api.passionapi.com/'
+
 /**
  * Brand logo component with skeleton loading
  */
@@ -161,7 +163,7 @@ function MobileSignInButton({ onNavigate }: MobileSignInButtonProps) {
       variant='secondary'
       size='sm'
       className='h-10 w-full'
-      render={<Link to='/sign-in' onClick={onNavigate} />}
+      render={<a href={LOGIN_URL} onClick={onNavigate} />}
     >
       {t('Sign in')}
     </Button>
