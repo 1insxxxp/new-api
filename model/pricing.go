@@ -36,6 +36,7 @@ type Pricing struct {
 	QuotaType              int                                  `json:"quota_type"`
 	ModelRatio             float64                              `json:"model_ratio"`
 	ModelPrice             float64                              `json:"model_price"`
+	GroupPrices            map[string]float64                   `json:"group_prices,omitempty"`
 	OwnerBy                string                               `json:"owner_by"`
 	CompletionRatio        float64                              `json:"completion_ratio"`
 	CacheRatio             *float64                             `json:"cache_ratio,omitempty"`
@@ -390,6 +391,7 @@ func updatePricing() {
 			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
 			pricing.QuotaType = 0
 		}
+		pricing.GroupPrices = ratio_setting.GetGroupModelPriceForModel(model)
 		if cacheRatio, ok := ratio_setting.GetCacheRatio(model); ok {
 			pricing.CacheRatio = &cacheRatio
 		}
@@ -407,11 +409,13 @@ func updatePricing() {
 			audioCompletionRatio := ratio_setting.GetAudioCompletionRatio(model)
 			pricing.AudioCompletionRatio = &audioCompletionRatio
 		}
-		if billingMode := billing_setting.GetBillingMode(model); billingMode == "tiered_expr" {
+		if billingMode := billing_setting.GetBillingMode(model); billingMode == billing_setting.BillingModeTieredExpr {
 			if expr, ok := billing_setting.GetBillingExpr(model); ok && strings.TrimSpace(expr) != "" {
 				pricing.BillingMode = billingMode
 				pricing.BillingExpr = expr
 			}
+		} else if billingMode == billing_setting.BillingModeImage {
+			pricing.BillingMode = billingMode
 		} else if target, resolved := ResolveTaskModelAlias(pluginGeneration, model); resolved && target.Declared != "" {
 			if tailMode := billing_setting.GetBillingMode(target.Declared); tailMode == "tiered_expr" {
 				if expr, ok := billing_setting.GetBillingExpr(target.Declared); ok && strings.TrimSpace(expr) != "" {

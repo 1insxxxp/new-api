@@ -60,6 +60,7 @@ import {
   taskTierConditions,
   pricingDisplayFallbackKey,
 } from '../lib/task-price-display'
+import { getPricingModeSymbol } from '../lib/price'
 import type { BillingUsageSchema, BillingUsageUnit } from '../types'
 
 type DynamicPricingBreakdownProps = {
@@ -91,6 +92,8 @@ type DynamicPricingBreakdownProps = {
     DynamicPriceOptions,
     'showRechargePrice' | 'priceRate' | 'usdExchangeRate'
   >
+  /** Override the configured currency symbol for the standard/recharge view. */
+  showRechargePrice?: boolean
   /**
    * Settlement usage facts from the consume log. Used to highlight the
    * expanded matrix display row when the engine label no longer matches
@@ -289,13 +292,14 @@ export function DynamicPricingBreakdown({
   compact = false,
   usageSchema,
   taskPriceOptions,
+  showRechargePrice,
   usageFacts,
 }: DynamicPricingBreakdownProps) {
   const { t, i18n } = useTranslation()
   const expr = billingExpr || ''
   const currency = useSystemConfigStore((s) => s.config.currency)
 
-  const { symbol, rate } = useMemo(() => {
+  const { symbol: configuredSymbol, rate } = useMemo(() => {
     if (currency.quotaDisplayType === 'CNY') {
       return { symbol: '¥', rate: currency.usdExchangeRate || 7 }
     }
@@ -307,6 +311,10 @@ export function DynamicPricingBreakdown({
     }
     return { symbol: '$', rate: 1 }
   }, [currency])
+  const symbol =
+    showRechargePrice === undefined
+      ? configuredSymbol
+      : getPricingModeSymbol(showRechargePrice)
 
   const { tiers, ruleGroups } = useMemo(() => {
     const split = splitBillingExprAndRequestRules(expr)

@@ -38,6 +38,7 @@ import {
 import { compileBillingExpression } from './billing-expression/parser'
 import { getDisplayGroupRatio } from './model-helpers'
 import { withPluginPricing } from './plugin-pricing'
+import { getPricingModeSymbol } from './price'
 import {
   evaluateTaskVisualConfig,
   getTaskNumberFields,
@@ -220,6 +221,7 @@ export function formatDynamicUnitPrice(
     digitsLarge: 4,
     digitsSmall: 6,
     abbreviate: false,
+    symbolOverride: getPricingModeSymbol(options.showRechargePrice ?? false),
   })
 }
 
@@ -243,6 +245,7 @@ export function formatTaskUsageUnitPrice(
     digitsLarge: 4,
     digitsSmall: 6,
     abbreviate: false,
+    symbolOverride: getPricingModeSymbol(options.showRechargePrice ?? false),
   })
 }
 

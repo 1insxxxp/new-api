@@ -65,6 +65,8 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   // Prices summarise the model-level price when ordinary requests pay it.
   const model = useMemo(() => withBasePricing(props.model), [props.model])
   const isTokenBased = isTokenBasedModel(model)
+  const fixedPriceUnit =
+    model.billing_mode === 'image' ? t('Image') : t('request')
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
@@ -262,7 +264,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           )}
           <span className='text-muted-foreground text-xs font-normal'>
             {' '}
-            / {t('request')}
+            / {fixedPriceUnit}
           </span>
         </span>
       </div>

@@ -19,7 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useCallback } from 'react'
 
-import { DEFAULT_LOGO } from '@/lib/constants'
+import { useTheme } from '@/context/theme-provider'
+import {
+  DEFAULT_LOGO,
+  DEFAULT_LOGO_DARK,
+  DEFAULT_LOGO_LIGHT,
+} from '@/lib/constants'
 import { applyFaviconToDom } from '@/lib/dom-utils'
 import { ensureStatus } from '@/lib/status-query'
 import { useSystemConfigStore } from '@/stores/system-config-store'
@@ -27,6 +32,14 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 interface UseSystemConfigOptions {
   /** Automatically fetch config from backend (use only in root component) */
   autoLoad?: boolean
+}
+
+export function resolveSystemLogo(
+  logo: string,
+  resolvedTheme: 'light' | 'dark'
+): string {
+  if (logo !== DEFAULT_LOGO) return logo
+  return resolvedTheme === 'dark' ? DEFAULT_LOGO_DARK : DEFAULT_LOGO_LIGHT
 }
 
 /** Preload an image, returning a cleanup that detaches the pending handlers. */
@@ -59,6 +72,7 @@ function preloadImage(
  */
 export function useSystemConfig(options: UseSystemConfigOptions = {}) {
   const { autoLoad = false } = options
+  const { resolvedTheme } = useTheme()
   const queryClient = useQueryClient()
   const { config, loading, loadedLogoUrl, setLoadedLogoUrl, setLoading } =
     useSystemConfigStore()
@@ -83,8 +97,10 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
   }, [autoLoad, loadConfig])
 
   // Preload logo image when URL changes
+  const resolvedLogo = resolveSystemLogo(config.logo, resolvedTheme)
+
   useEffect(() => {
-    const { logo } = config
+    const logo = resolvedLogo
 
     // Skip if logo is already loaded
     if (!logo || logo === loadedLogoUrl) return
@@ -97,7 +113,7 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
         applyFaviconToDom(logo)
       },
       () => {
-        if (logo !== DEFAULT_LOGO) {
+        if (logo !== DEFAULT_LOGO_LIGHT && logo !== DEFAULT_LOGO_DARK) {
           // eslint-disable-next-line no-console
           console.error('Failed to load logo:', logo)
         }
@@ -106,11 +122,12 @@ export function useSystemConfig(options: UseSystemConfigOptions = {}) {
       }
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.logo, loadedLogoUrl, setLoadedLogoUrl])
+  }, [resolvedLogo, loadedLogoUrl, setLoadedLogoUrl])
 
   return {
     ...config,
+    logo: resolvedLogo,
     loading,
-    logoLoaded: config.logo === loadedLogoUrl && !!loadedLogoUrl,
+    logoLoaded: resolvedLogo === loadedLogoUrl && !!loadedLogoUrl,
   }
 }
