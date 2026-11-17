@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { isPortalAuthPath, PORTAL_LOGIN_URL } from '@/lib/portal-login'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import {
@@ -144,6 +145,9 @@ export const Route = createRootRouteWithContext<{
 }>()({
   // 应用初始化与路由解析前统一校验会话
   beforeLoad: async ({ location }) => {
+    if (isPortalAuthPath(location.pathname)) {
+      throw redirect({ href: PORTAL_LOGIN_URL, reloadDocument: true, replace: true })
+    }
     const legacyTarget = resolveLegacyRoute(location.href)
     if (legacyTarget) {
       throw redirect({ href: legacyTarget, replace: true })
