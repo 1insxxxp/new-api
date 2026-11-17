@@ -16,12 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { PORTAL_LOGIN_URL } from '@/lib/portal-login'
 import { Link } from '@tanstack/react-router'
 import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { PORTAL_LOGIN_URL } from '@/lib/portal-login'
 
 interface HeroButtonsProps {
   isAuthenticated: boolean
@@ -46,7 +46,11 @@ export function HeroButtons({ isAuthenticated }: HeroButtonsProps) {
         {t('Get Started')}
         <ArrowRight className='ml-2 h-5 w-5' />
       </Button>
-      <Button size='lg' variant='outline' render={<a href={PORTAL_LOGIN_URL} />}>
+      <Button
+        size='lg'
+        variant='outline'
+        render={<a href={PORTAL_LOGIN_URL} />}
+      >
         {t('Sign In')}
       </Button>
     </>
